@@ -33,7 +33,7 @@ export function Launcher({ onOpened }: { onOpened: () => void }) {
   return (
     <div className="wb">
       <nav className="activity" aria-label="Views">
-        <span className="act-mark" aria-hidden="true">k</span>
+        <span className="act-mark" aria-hidden="true"><img src="/mark.png" alt="" /></span>
         <button className="act on" title="Explorer" aria-label="Explorer" aria-pressed="true"><Icon.files /></button>
         {idle.map((I, i) => (
           <button key={i} className="act" disabled title="Open a folder first" aria-label="Open a folder first"><I /></button>
@@ -72,8 +72,8 @@ export function Launcher({ onOpened }: { onOpened: () => void }) {
         {opening && <ProgressBar job={job} className="edge" />}
         <div className="editor-body">
           <div className="start-page">
-            <p className="wordmark-big">kuli<span>dev</span></p>
-            <p className="start-lede">Map a codebase, read it with evidence, and change it.</p>
+            <p className="wordmark-big">Kuli<span>Dev</span></p>
+            <p className="start-lede">Docs-nya mana? Ini. Map a codebase, read it with evidence, and change it.</p>
             {(failed || ws.error) && <p className="notice warn" role="alert">{failed || ws.error}</p>}
             {opening ? (
               <OpeningCard job={job} />

@@ -41,7 +41,7 @@ export function CodeTab({ path, from, to, onOpen, onCursor, onDirty }: {
           range: new monaco.Range(start, 1, end, 1),
           options: {
             isWholeLine: true, linesDecorationsClassName: `gutter-${c.kind}`,
-            overviewRuler: { color: c.kind === "added" ? "#6f8f5a" : c.kind === "deleted" ? "#8f4b2e" : "#4f7f8f", position: monaco.editor.OverviewRulerLane.Left },
+            overviewRuler: { color: c.kind === "added" ? "#22c55e" : c.kind === "deleted" ? "#ef4444" : "#3b82f6", position: monaco.editor.OverviewRulerLane.Left },
           },
         };
       }));
@@ -146,8 +146,8 @@ export function CodeTab({ path, from, to, onOpen, onCursor, onDirty }: {
       range: new monaco.Range(a, 1, end, 1),
       options: {
         isWholeLine: true, className: "mono-cited", linesDecorationsClassName: "mono-cited-bar",
-        overviewRuler: { color: "#f2c230", position: monaco.editor.OverviewRulerLane.Full },
-        minimap: { color: "#f2c230", position: monaco.editor.MinimapPosition.Inline },
+        overviewRuler: { color: "#facc15", position: monaco.editor.OverviewRulerLane.Full },
+        minimap: { color: "#facc15", position: monaco.editor.MinimapPosition.Inline },
       },
     }]);
     ed.revealLinesInCenter(a, end);

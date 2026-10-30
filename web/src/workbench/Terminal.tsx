@@ -95,7 +95,7 @@ function TermView({ id, onExit }: { id: string; onExit: () => void }) {
   useEffect(() => {
     const term = new XTerm({
       fontFamily: "'Martian Mono', ui-monospace, monospace", fontSize: 12.5, cursorBlink: true, scrollback: 5000,
-      theme: { background: css("--concrete"), foreground: css("--ink"), cursor: css("--safety"), selectionBackground: "#34505a" },
+      theme: { background: css("--concrete"), foreground: css("--ink"), cursor: css("--brand"), selectionBackground: css("--selection") },
     });
     const fit = new FitAddon();
     term.loadAddon(fit);

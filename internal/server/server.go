@@ -103,6 +103,7 @@ func (s *Server) reload() error {
 	s.mu.Lock()
 	s.snap, s.comps, s.repos = snap, comps, repos
 	s.mu.Unlock()
+	go s.buildSystems(snap) // ready before anyone opens the Systems view
 	return nil
 }
 
@@ -306,13 +307,19 @@ func (s *Server) systemsMap(w http.ResponseWriter, r *http.Request) {
 	s.mu.RLock()
 	snap := s.snap
 	s.mu.RUnlock()
+	writeJSON(w, s.buildSystems(snap))
+}
+
+// buildSystems computes the systems map for a scan once; callers for the same scan
+// wait for the first.
+func (s *Server) buildSystems(snap *store.Snapshot) *systems.Map {
 	s.sysMu.Lock()
 	defer s.sysMu.Unlock()
 	if s.sysFor != snap || s.sys == nil {
 		m := systems.Build(s.root, snap)
 		s.sys, s.sysFor = &m, snap
 	}
-	writeJSON(w, s.sys)
+	return s.sys
 }
 
 func (s *Server) graph(w http.ResponseWriter, r *http.Request) {

@@ -181,7 +181,7 @@ function ProjectPanel({ m, path, ps, name, onPair }: {
       </p>
       <p className="small">{fmt(p.files)} files, {fmt(p.lines)} lines</p>
       {p.langs.length > 0 && (
-        <p className="small">{p.langs.map((l) => `${l.lang} ${Math.round((l.lines / total) * 100)}%`).join(", ")}</p>
+        <p className="small">{p.langs.map((l) => { const pc = (l.lines / total) * 100; return `${l.lang} ${pc < 1 ? "<1" : Math.round(pc)}%`; }).join(", ")}</p>
       )}
       {p.markers.length > 0 && <p className="small muted">Project files: {p.markers.join(", ")}</p>}
       {p.packages.length > 0 && (

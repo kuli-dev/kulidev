@@ -1,3 +1,5 @@
+<p align="center"><img src="assets/brand/logo.png" width="200" alt="KuliDev"></p>
+
 # KuliDev
 
 > **Docs-nya mana?** — every developer who ever inherited a repo.

@@ -38,7 +38,7 @@ export function PairScreen({ onPaired }: { onPaired: () => void }) {
   return (
     <main className="pair">
       <form className="pair-card" onSubmit={submit}>
-        <p className="wordmark-big">kuli<span>dev</span></p>
+        <p className="wordmark-big">Kuli<span>Dev</span></p>
         <h1>Pair this device</h1>
         <p className="muted">
           This workspace only opens on paired devices. Use the code printed by <code>kuli serve</code>, or one made in

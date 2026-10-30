@@ -112,10 +112,10 @@ export function SettingsView({ onOpenFolder, onRescan, onSaved, root }: {
       <section className="set-section">
         <h2>Appearance</h2>
         <div className="seg" role="radiogroup" aria-label="Theme">
-          {(["system", "light", "dark"] as ThemePref[]).map((t) => (
+          {(["dark", "light", "system"] as ThemePref[]).map((t) => (
             <button key={t} role="radio" aria-checked={theme === t} className={theme === t ? "on" : ""}
               onClick={() => { setTheme(t); setThemePref(t); }}>
-              {t === "system" ? "Match system" : t === "light" ? "Light" : "Dark"}
+              {t === "system" ? "Match system" : t === "light" ? "Light" : "Dark (default)"}
             </button>
           ))}
         </div>

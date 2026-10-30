@@ -21,6 +21,12 @@
 - **Git in a folder of several repositories**: the Changes panel lists every repository
   with its branch and change count; pick one to commit, switch branches, pull or push.
   Diffs, gutter markers and staging work for files in any of them.
+- **New look and icon**: the KuliDev design system (dark industrial). Charcoal surfaces,
+  industrial orange for actions, focus and what is active, yellow kept for evidence and
+  waiting agents, red for errors; dark is the default (light and match-system in
+  Settings); editor and terminal themes to match. The K logo is the app icon (exe,
+  taskbar, window), favicon, phone home-screen icon and activity-bar mark. The Windows
+  apps carry version info and are DPI-aware.
 - **Settings** (gear at the bottom left, Ctrl+,): the AI model connection (base URL,
   model, API key, reasoning effort, max tokens) with Test connection, applied without a
   restart and saved per user (the key is never shown again); light/dark/system theme;

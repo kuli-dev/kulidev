@@ -292,7 +292,7 @@ export function Workbench() {
   return (
     <div className={`wb ${view ? "" : "no-side"} ${chat ? "with-chat" : ""}`}>
       <nav className="activity" aria-label="Views">
-        <a className="act-mark" href="#/" onClick={(e) => { e.preventDefault(); openTab({ kind: "welcome" }); }} title="Welcome">k</a>
+        <a className="act-mark" href="#/" onClick={(e) => { e.preventDefault(); openTab({ kind: "welcome" }); }} title="Welcome"><img src="/mark.png" alt="KuliDev" /></a>
         {activity.map((a) => (
           <button key={a.v} className={`act ${view === a.v ? "on" : ""}`} title={a.label} aria-label={a.label}
             aria-pressed={view === a.v} onClick={() => setView((v) => (v === a.v ? null : a.v))}>
@@ -475,7 +475,7 @@ function useNarrow(): boolean {
 function EmptyEditor({ onQuick }: { onQuick: () => void }) {
   return (
     <div className="empty-editor">
-      <p className="wordmark-big">kuli<span>dev</span></p>
+      <p className="wordmark-big">Kuli<span>Dev</span></p>
       <ul className="plain keys">
         <li><button className="btn-link" onClick={onQuick}>Go to file</button> <kbd>Ctrl</kbd> <kbd>P</kbd></li>
         <li>Search definitions <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>F</kbd></li>

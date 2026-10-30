@@ -177,6 +177,9 @@ func (b *builder) http(snap *store.Snapshot) {
 			}
 			defined := false
 			for _, re := range routeRes {
+				if !maybeRoute(line) {
+					break
+				}
 				if m := re.FindStringSubmatch(line); m != nil {
 					segs := append(append([]string{}, prefix...), splitPath(m[len(m)-1])...)
 					if len(segs) > 0 {
@@ -186,7 +189,7 @@ func (b *builder) http(snap *store.Snapshot) {
 					break
 				}
 			}
-			if defined || !callLineRe.MatchString(line) {
+			if defined || !strings.Contains(line, "/") || !strings.ContainsAny(line, "\"'`") || !callLineRe.MatchString(line) {
 				continue
 			}
 			if t := strings.TrimSpace(line); strings.HasPrefix(t, ">>>") || strings.HasPrefix(t, "*") || strings.HasPrefix(t, "e.g.") {
@@ -233,3 +236,14 @@ func (b *builder) http(snap *store.Snapshot) {
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
+
+// maybeRoute is a cheap check before the route regexes run on a line.
+func maybeRoute(line string) bool {
+	for _, k := range []string{"@", ".get(", ".post(", ".put(", ".patch(", ".delete(", ".all(", ".route(",
+		"Handle", ".GET(", ".POST(", ".PUT(", ".PATCH(", ".DELETE(", "Route::"} {
+		if strings.Contains(line, k) {
+			return true
+		}
+	}
+	return false
+}
