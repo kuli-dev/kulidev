@@ -89,7 +89,7 @@ func (s *Server) register(srv *mcp.Server) {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "kuli_search",
-		Description: "Full-text search over definitions (functions, methods, classes, interfaces, types), files, Go packages and external modules. Returns kind, qualified name and file:line.",
+		Description: "Full-text search over definitions (functions, methods, classes, interfaces, types), files, Go packages and external modules — by name and by doc comment/docstring text. Returns kind, qualified name, file:line and the doc summary.",
 		Annotations: readOnly("Search code knowledge"),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in searchIn) (*mcp.CallToolResult, any, error) {
 		limit := in.Limit
@@ -141,7 +141,7 @@ func (s *Server) register(srv *mcp.Server) {
 
 	mcp.AddTool(srv, &mcp.Tool{
 		Name:        "kuli_file_symbols",
-		Description: "Outline of one file: every definition with its kind and line range, in source order.",
+		Description: "Outline of one file: every definition with its kind, line range and doc summary, in source order.",
 		Annotations: readOnly("File outline"),
 	}, func(ctx context.Context, _ *mcp.CallToolRequest, in fileIn) (*mcp.CallToolResult, any, error) {
 		hits, err := s.store.FileSymbols(in.Path)
@@ -234,6 +234,9 @@ func formatHits(hits []store.Hit) string {
 			loc = fmt.Sprintf("%s:%d", h.Path, h.Line)
 		}
 		fmt.Fprintf(&b, "%-10s %-45s %s\n", h.Kind, h.Name, loc)
+		if h.Detail != "" {
+			fmt.Fprintf(&b, "           %s\n", h.Detail)
+		}
 	}
 	return b.String()
 }

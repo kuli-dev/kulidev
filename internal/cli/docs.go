@@ -75,13 +75,13 @@ before anything is sent to the model.`,
 			fmt.Fprintf(out, "\nDocs-nya mana? Ini → %s\n\n", relTo(snap.Run.Root, opts.OutDir))
 			for _, d := range m.Docs {
 				grounding := ""
-				if d.Mode == "llm" {
+				if strings.HasPrefix(d.Mode, "llm") {
 					grounding = fmt.Sprintf("  %3.0f%% of claims cited", d.Coverage*100)
 					if d.Removed > 0 {
 						grounding += fmt.Sprintf(", %d invalid citations removed", d.Removed)
 					}
 				}
-				fmt.Fprintf(out, "  %-22s %-10s %3d citations%s\n", d.File, d.Mode, d.Valid, grounding)
+				fmt.Fprintf(out, "  %-22s %-13s %3d citations%s\n", d.File, d.Mode, d.Valid, grounding)
 			}
 			return nil
 		},

@@ -140,11 +140,11 @@ func analyzeFile(p *parse.Parser, root, rel string) (model.FileResult, string) {
 	if li.grammar == "" || len(b) > MaxParseBytes {
 		return fr, man
 	}
-	syms, imps, err := p.Parse(li.grammar, b)
+	res, err := p.Parse(li.grammar, b)
 	if err != nil {
 		fr.Err = err.Error()
 		return fr, man
 	}
-	fr.Parsed, fr.Symbols, fr.Imports = true, syms, imps
+	fr.Parsed, fr.Symbols, fr.Imports, fr.Doc = true, res.Symbols, res.Imports, res.Doc
 	return fr, man
 }

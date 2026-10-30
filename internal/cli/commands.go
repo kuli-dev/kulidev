@@ -99,6 +99,9 @@ func newFindCmd(o *options) *cobra.Command {
 			}
 			for _, h := range hits {
 				fmt.Fprintf(out, "%-10s %-40s %s\n", h.Kind, h.Name, location(h.Path, h.Line))
+				if h.Detail != "" {
+					fmt.Fprintf(out, "           %s\n", truncate(h.Detail, 110))
+				}
 			}
 			return nil
 		},
@@ -154,4 +157,11 @@ func location(path string, line int) string {
 		return fmt.Sprintf("%s:%d", path, line)
 	}
 	return path
+}
+
+func truncate(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[:n-1] + "…"
 }

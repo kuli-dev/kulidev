@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS files (
     lines  INTEGER,
     sha256 TEXT,
     parsed INTEGER NOT NULL DEFAULT 0,
-    error  TEXT
+    error  TEXT,
+    doc    TEXT
 );
 
 -- Engineering entities: FILE, PACKAGE, EXTERNAL, and symbols (function, method, class, ...).
@@ -30,7 +31,8 @@ CREATE TABLE IF NOT EXISTS nodes (
     line_start INTEGER,
     line_end   INTEGER,
     lang       TEXT,
-    container  TEXT
+    container  TEXT,
+    doc        TEXT
 );
 CREATE INDEX IF NOT EXISTS nodes_kind ON nodes(kind);
 CREATE INDEX IF NOT EXISTS nodes_qualname ON nodes(qualname);
@@ -56,4 +58,4 @@ CREATE TABLE IF NOT EXISTS manifests (
     kind TEXT NOT NULL
 );
 
-CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(name, words, qualname, path);
+CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(name, words, qualname, path, doc);

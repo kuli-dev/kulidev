@@ -26,7 +26,7 @@ func TestScanSaveQuery(t *testing.T) {
 	writeTree(t, root, map[string]string{
 		"go.mod":                  "module example.com/shop\n",
 		"cmd/shop/main.go":        "package main\nimport \"example.com/shop/internal/payment\"\nfunc main() { payment.Charge() }\n",
-		"internal/payment/pay.go": "package payment\ntype PaymentService struct{}\nfunc Charge() {}\n",
+		"internal/payment/pay.go": "package payment\n// PaymentService talks to the card gateway.\ntype PaymentService struct{}\nfunc Charge() {}\n",
 		"web/src/api.ts":          "export async function fetchOrders() {}\n",
 		"web/src/app.tsx":         "import { fetchOrders } from './api';\nimport React from 'react';\nexport function App() { return null }\n",
 		"Dockerfile":              "FROM golang\n",
@@ -74,12 +74,17 @@ func TestScanSaveQuery(t *testing.T) {
 	}
 	found := false
 	for _, h := range hits {
-		if h.Name == "PaymentService" && h.Path == "internal/payment/pay.go" && h.Line == 2 {
+		if h.Name == "PaymentService" && h.Path == "internal/payment/pay.go" && h.Line == 3 && h.Detail == "PaymentService talks to the card gateway." {
 			found = true
 		}
 	}
 	if !found {
 		t.Errorf("Find(payment) missing PaymentService with evidence: %+v", hits)
+	}
+
+	// Doc text is searchable too.
+	if hits, _ := st.Find("gateway", 5); len(hits) == 0 || hits[0].Name != "PaymentService" {
+		t.Errorf("Find(gateway) should match the doc comment: %+v", hits)
 	}
 
 	_, users, err := st.Deps("internal/payment", true)

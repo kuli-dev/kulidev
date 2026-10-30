@@ -8,6 +8,7 @@ type Symbol struct {
 	Container string // enclosing class / receiver type, if any
 	LineStart int    // 1-based
 	LineEnd   int    // 1-based, inclusive
+	Doc       string // doc comment / docstring, first paragraph
 }
 
 // QualifiedName returns Container.Name, or Name when there is no container.
@@ -35,6 +36,7 @@ type FileResult struct {
 	Lines   int
 	SHA256  string
 	Parsed  bool
+	Doc     string // file/package/module documentation
 	Symbols []Symbol
 	Imports []Import
 	Err     string

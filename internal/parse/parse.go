@@ -73,18 +73,25 @@ func (pr *Parser) Close() {
 	pr.p.Close()
 }
 
-// Parse returns the symbols and imports defined in src.
-func (pr *Parser) Parse(grammarID string, src []byte) ([]model.Symbol, []model.Import, error) {
+// Result is what one file contains.
+type Result struct {
+	Symbols []model.Symbol
+	Imports []model.Import
+	Doc     string // file/package/module documentation, first paragraph
+}
+
+// Parse returns the symbols, imports and documentation in src.
+func (pr *Parser) Parse(grammarID string, src []byte) (*Result, error) {
 	g, ok := grammars[grammarID]
 	if !ok {
-		return nil, nil, fmt.Errorf("unsupported grammar %q", grammarID)
+		return nil, fmt.Errorf("unsupported grammar %q", grammarID)
 	}
 	if err := pr.p.SetLanguage(g.lang); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	tree := pr.p.Parse(src, nil)
 	if tree == nil {
-		return nil, nil, fmt.Errorf("parse failed")
+		return nil, fmt.Errorf("parse failed")
 	}
 	defer tree.Close()
 
@@ -147,6 +154,7 @@ func (pr *Parser) Parse(grammarID string, src []byte) ([]model.Symbol, []model.I
 			Name:      name,
 			LineStart: int(def.StartPosition().Row) + 1,
 			LineEnd:   int(def.EndPosition().Row) + 1,
+			Doc:       symbolDoc(grammarID, def, src),
 		}
 		switch {
 		case grammarID == Go && kind == "method":
@@ -166,7 +174,7 @@ func (pr *Parser) Parse(grammarID string, src []byte) ([]model.Symbol, []model.I
 		}
 		syms = append(syms, s)
 	}
-	return syms, imps, nil
+	return &Result{Symbols: syms, Imports: imps, Doc: fileDoc(grammarID, tree.RootNode(), src)}, nil
 }
 
 var classKinds = map[string]bool{

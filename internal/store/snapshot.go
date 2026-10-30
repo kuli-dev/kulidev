@@ -9,6 +9,7 @@ import (
 // FileInfo is one scanned file.
 type FileInfo struct {
 	Path, Lang, SHA256 string
+	Doc                string
 	Lines              int
 	Parsed             bool
 }
@@ -16,6 +17,7 @@ type FileInfo struct {
 // SymbolInfo is a top-level definition (no container) or a class-like type.
 type SymbolInfo struct {
 	Kind, Name, Path string
+	Doc              string
 	Line, EndLine    int
 }
 
@@ -44,13 +46,13 @@ func (s *Store) LoadSnapshot() (*Snapshot, error) {
 	}
 	snap.Run = st.Run
 
-	rows, err := s.DB.Query(`SELECT path, COALESCE(lang,''), COALESCE(sha256,''), COALESCE(lines,0), parsed FROM files ORDER BY path`)
+	rows, err := s.DB.Query(`SELECT path, COALESCE(lang,''), COALESCE(sha256,''), COALESCE(lines,0), parsed, COALESCE(doc,'') FROM files ORDER BY path`)
 	if err != nil {
 		return nil, err
 	}
 	for rows.Next() {
 		var f FileInfo
-		if err := rows.Scan(&f.Path, &f.Lang, &f.SHA256, &f.Lines, &f.Parsed); err != nil {
+		if err := rows.Scan(&f.Path, &f.Lang, &f.SHA256, &f.Lines, &f.Parsed, &f.Doc); err != nil {
 			rows.Close()
 			return nil, err
 		}
@@ -58,7 +60,7 @@ func (s *Store) LoadSnapshot() (*Snapshot, error) {
 	}
 	rows.Close()
 
-	rows, err = s.DB.Query(`SELECT kind, name, path, line_start, line_end FROM nodes
+	rows, err = s.DB.Query(`SELECT kind, name, path, line_start, line_end, COALESCE(doc,'') FROM nodes
 		WHERE kind NOT IN ('FILE','PACKAGE','EXTERNAL','method') AND container IS NULL
 		ORDER BY path, line_start`)
 	if err != nil {
@@ -66,7 +68,7 @@ func (s *Store) LoadSnapshot() (*Snapshot, error) {
 	}
 	for rows.Next() {
 		var y SymbolInfo
-		if err := rows.Scan(&y.Kind, &y.Name, &y.Path, &y.Line, &y.EndLine); err != nil {
+		if err := rows.Scan(&y.Kind, &y.Name, &y.Path, &y.Line, &y.EndLine, &y.Doc); err != nil {
 			rows.Close()
 			return nil, err
 		}

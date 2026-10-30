@@ -102,7 +102,7 @@ func (s *Store) counts(q string, args ...any) ([]Count, error) {
 type Hit struct {
 	Kind, Name, Path string
 	Line             int
-	Detail           string
+	Detail           string // doc text for search hits; line range (+ doc) for outlines
 }
 
 // Find runs a full-text search over symbol, file and module names.
@@ -122,10 +122,11 @@ func (s *Store) Find(query string, limit int) ([]Hit, error) {
 	if len(terms) == 0 {
 		return nil, fmt.Errorf("empty query")
 	}
-	rows, err := s.DB.Query(`SELECT n.kind, n.qualname, COALESCE(n.path,''), COALESCE(n.line_start,0)
+	// Name matches rank above matches that only hit the doc text.
+	rows, err := s.DB.Query(`SELECT n.kind, n.qualname, COALESCE(n.path,''), COALESCE(n.line_start,0), COALESCE(n.doc,'')
 		FROM nodes_fts f JOIN nodes n ON n.id = f.rowid
 		WHERE nodes_fts MATCH ?
-		ORDER BY (n.kind IN ('FILE','PACKAGE','EXTERNAL')), rank LIMIT ?`, strings.Join(terms, " AND "), limit)
+		ORDER BY (n.kind IN ('FILE','PACKAGE','EXTERNAL')), bm25(nodes_fts, 10.0, 10.0, 5.0, 2.0, 1.0) LIMIT ?`, strings.Join(terms, " AND "), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +134,7 @@ func (s *Store) Find(query string, limit int) ([]Hit, error) {
 	var out []Hit
 	for rows.Next() {
 		var h Hit
-		if err := rows.Scan(&h.Kind, &h.Name, &h.Path, &h.Line); err != nil {
+		if err := rows.Scan(&h.Kind, &h.Name, &h.Path, &h.Line, &h.Detail); err != nil {
 			return nil, err
 		}
 		if i := strings.IndexByte(h.Name, '#'); i >= 0 {
@@ -218,7 +219,7 @@ func (s *Store) Deps(target string, reverse bool) (resolved string, hits []Hit, 
 // FileSymbols lists the definitions in one file, in source order.
 func (s *Store) FileSymbols(file string) ([]Hit, error) {
 	file = path.Clean(strings.TrimPrefix(file, "./"))
-	rows, err := s.DB.Query(`SELECT kind, qualname, path, line_start, line_end FROM nodes
+	rows, err := s.DB.Query(`SELECT kind, qualname, path, line_start, line_end, COALESCE(doc,'') FROM nodes
 		WHERE path = ? AND kind NOT IN ('FILE','PACKAGE','EXTERNAL') ORDER BY line_start`, file)
 	if err != nil {
 		return nil, err
@@ -228,13 +229,17 @@ func (s *Store) FileSymbols(file string) ([]Hit, error) {
 	for rows.Next() {
 		var h Hit
 		var end int
-		if err := rows.Scan(&h.Kind, &h.Name, &h.Path, &h.Line, &end); err != nil {
+		var doc string
+		if err := rows.Scan(&h.Kind, &h.Name, &h.Path, &h.Line, &end, &doc); err != nil {
 			return nil, err
 		}
 		if i := strings.IndexByte(h.Name, '#'); i >= 0 {
 			h.Name = h.Name[i+1:]
 		}
 		h.Detail = fmt.Sprintf("lines %d-%d", h.Line, end)
+		if doc != "" {
+			h.Detail += " — " + doc
+		}
 		out = append(out, h)
 	}
 	return out, rows.Err()

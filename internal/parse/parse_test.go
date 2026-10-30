@@ -13,11 +13,11 @@ func parse(t *testing.T, g, src string) ([]model.Symbol, []model.Import) {
 		t.Fatal(err)
 	}
 	defer p.Close()
-	syms, imps, err := p.Parse(g, []byte(src))
+	res, err := p.Parse(g, []byte(src))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return syms, imps
+	return res.Symbols, res.Imports
 }
 
 func names(syms []model.Symbol) map[string]string {
@@ -129,5 +129,96 @@ class A { b() {} }
 	expectImports(t, got, "express")
 	if got["not-an-import"] {
 		t.Errorf("non-require call captured as import: %v", got)
+	}
+}
+
+func docs(t *testing.T, g, src string) (map[string]string, string) {
+	t.Helper()
+	p, err := NewParser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer p.Close()
+	res, err := p.Parse(g, []byte(src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := map[string]string{}
+	for _, s := range res.Symbols {
+		out[s.QualifiedName()] = s.Doc
+	}
+	return out, res.Doc
+}
+
+func TestDocs(t *testing.T) {
+	got, file := docs(t, Go, `// Package pay charges customers.
+//
+// Details nobody reads.
+package pay
+
+// Service charges cards
+// via the gateway.
+type Service struct{}
+
+// unrelated comment
+
+func Bare() {}
+
+// Charge takes money.
+func (s *Service) Charge() {}
+`)
+	if file != "Package pay charges customers." {
+		t.Errorf("go file doc = %q", file)
+	}
+	want := map[string]string{"Service": "Service charges cards via the gateway.", "Bare": "", "Service.Charge": "Charge takes money."}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("go doc %s = %q, want %q", k, got[k], v)
+		}
+	}
+
+	got, file = docs(t, Python, `"""Payment module.
+
+More text."""
+
+class Payment:
+    """Holds a payment."""
+    def refund(self):
+        r"""Refund it
+        fully."""
+        pass
+
+def plain():
+    x = 1
+`)
+	if file != "Payment module." {
+		t.Errorf("py file doc = %q", file)
+	}
+	want = map[string]string{"Payment": "Holds a payment.", "Payment.refund": "Refund it fully.", "plain": ""}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("py doc %s = %q, want %q", k, got[k], v)
+		}
+	}
+
+	got, _ = docs(t, TypeScript, `/**
+ * Loads orders for the dashboard.
+ * @param id the customer
+ */
+export async function loadOrders(id: string) {}
+
+/** Formats money. */
+export const fmt = (n: number) => String(n);
+
+class A {
+  /** Saves A. */
+  save() {}
+}
+`)
+	want = map[string]string{"loadOrders": "Loads orders for the dashboard.", "fmt": "Formats money.", "A.save": "Saves A."}
+	for k, v := range want {
+		if got[k] != v {
+			t.Errorf("ts doc %s = %q, want %q", k, got[k], v)
+		}
 	}
 }

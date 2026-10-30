@@ -4,6 +4,7 @@ package store
 import (
 	"database/sql"
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,6 +22,13 @@ var schema string
 
 // DBFile is the database file name inside the data directory.
 const DBFile = "kulidev.db"
+
+// schemaVersion changes whenever the schema does. The database is a cache rebuilt by
+// `kuli scan`, so an older one is simply dropped instead of migrated.
+const schemaVersion = 2
+
+// ErrStale is returned when the knowledge base was built by an older kuli.
+var ErrStale = errors.New("knowledge base was built by an older kuli; run `kuli scan` to rebuild it")
 
 // Store is an open knowledge database.
 type Store struct {
@@ -42,7 +50,20 @@ func Open(dataDir string) (*Store, error) {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema); err != nil {
+	var ver int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&ver); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if ver != schemaVersion {
+		for _, t := range []string{"nodes_fts", "edges", "nodes", "files", "manifests", "runs"} {
+			if _, err := db.Exec("DROP TABLE IF EXISTS " + t); err != nil {
+				db.Close()
+				return nil, err
+			}
+		}
+	}
+	if _, err := db.Exec(schema + fmt.Sprintf("\nPRAGMA user_version = %d;", schemaVersion)); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
@@ -54,7 +75,17 @@ func OpenExisting(dataDir string) (*Store, error) {
 	if _, err := os.Stat(filepath.Join(dataDir, DBFile)); err != nil {
 		return nil, fmt.Errorf("no knowledge base in %s (run `kuli scan` first)", dataDir)
 	}
-	return Open(dataDir)
+	st, err := Open(dataDir)
+	if err != nil {
+		return nil, err
+	}
+	var n int
+	st.DB.QueryRow(`SELECT COUNT(*) FROM runs`).Scan(&n)
+	if n == 0 {
+		st.Close()
+		return nil, ErrStale
+	}
+	return st, nil
 }
 
 func (s *Store) Close() error { return s.DB.Close() }
@@ -91,20 +122,20 @@ func (s *Store) Save(res *scan.Result) (runID int64, err error) {
 	defer ins.close()
 
 	for _, f := range res.Files {
-		if _, err = tx.Exec(`INSERT INTO files(path, lang, size, lines, sha256, parsed, error) VALUES(?,?,?,?,?,?,?)`,
-			f.Path, f.Lang, f.Size, f.Lines, f.SHA256, f.Parsed, nullable(f.Err)); err != nil {
+		if _, err = tx.Exec(`INSERT INTO files(path, lang, size, lines, sha256, parsed, error, doc) VALUES(?,?,?,?,?,?,?,?)`,
+			f.Path, f.Lang, f.Size, f.Lines, f.SHA256, f.Parsed, nullable(f.Err), nullable(f.Doc)); err != nil {
 			return 0, err
 		}
 		if !f.Parsed {
 			continue
 		}
-		fileID, e := ins.node("FILE", f.Path, f.Path, f.Path, 1, f.Lines, f.Lang)
+		fileID, e := ins.node("FILE", f.Path, f.Path, f.Path, 1, f.Lines, f.Lang, f.Doc)
 		if e != nil {
 			return 0, e
 		}
 		if f.Lang == "Go" {
 			pkg := filepath.ToSlash(filepath.Dir(f.Path))
-			pkgID, e := ins.node("PACKAGE", pkg, "pkg:"+pkg, pkg, 0, 0, "Go")
+			pkgID, e := ins.node("PACKAGE", pkg, "pkg:"+pkg, pkg, 0, 0, "Go", "")
 			if e != nil {
 				return 0, e
 			}
@@ -114,7 +145,7 @@ func (s *Store) Save(res *scan.Result) (runID int64, err error) {
 		}
 		for _, sym := range f.Symbols {
 			q := f.Path + "#" + sym.QualifiedName()
-			id, e := ins.symbol(sym.Kind, sym.Name, q, f.Path, sym.LineStart, sym.LineEnd, f.Lang, sym.Container)
+			id, e := ins.symbol(sym.Kind, sym.Name, q, f.Path, sym.LineStart, sym.LineEnd, f.Lang, sym.Container, sym.Doc)
 			if e != nil {
 				return 0, e
 			}
@@ -132,12 +163,12 @@ func (s *Store) Save(res *scan.Result) (runID int64, err error) {
 			toID = ins.ids["FILE\x00"+imp.Target.Ref]
 		case scan.TargetPackage:
 			// Go packages already exist; Python namespace packages are created on first use.
-			if toID, err = ins.node("PACKAGE", imp.Target.Ref, "pkg:"+imp.Target.Ref, imp.Target.Ref, 0, 0, ""); err != nil {
+			if toID, err = ins.node("PACKAGE", imp.Target.Ref, "pkg:"+imp.Target.Ref, imp.Target.Ref, 0, 0, "", ""); err != nil {
 				return 0, err
 			}
 		}
 		if toID == 0 {
-			if toID, err = ins.node("EXTERNAL", imp.Target.Ref, "ext:"+imp.Target.Ref, "", 0, 0, ""); err != nil {
+			if toID, err = ins.node("EXTERNAL", imp.Target.Ref, "ext:"+imp.Target.Ref, "", 0, 0, "", ""); err != nil {
 				return 0, err
 			}
 		}
@@ -165,13 +196,13 @@ type inserter struct {
 }
 
 func (in *inserter) prepare() (err error) {
-	if in.nodeSt, err = in.tx.Prepare(`INSERT INTO nodes(kind, name, qualname, path, line_start, line_end, lang, container) VALUES(?,?,?,?,?,?,?,?)`); err != nil {
+	if in.nodeSt, err = in.tx.Prepare(`INSERT INTO nodes(kind, name, qualname, path, line_start, line_end, lang, container, doc) VALUES(?,?,?,?,?,?,?,?,?)`); err != nil {
 		return err
 	}
 	if in.edgeSt, err = in.tx.Prepare(`INSERT INTO edges(src, dst, rel, path, line_start, line_end, origin, confidence) VALUES(?,?,?,?,?,?, 'static_analysis', 1.0)`); err != nil {
 		return err
 	}
-	in.ftsSt, err = in.tx.Prepare(`INSERT INTO nodes_fts(rowid, name, words, qualname, path) VALUES(?,?,?,?,?)`)
+	in.ftsSt, err = in.tx.Prepare(`INSERT INTO nodes_fts(rowid, name, words, qualname, path, doc) VALUES(?,?,?,?,?,?)`)
 	return err
 }
 
@@ -184,25 +215,25 @@ func (in *inserter) close() {
 }
 
 // node inserts a deduplicated FILE/PACKAGE/EXTERNAL node.
-func (in *inserter) node(kind, name, qualname, path string, ls, le int, lang string) (int64, error) {
+func (in *inserter) node(kind, name, qualname, path string, ls, le int, lang, doc string) (int64, error) {
 	key := kind + "\x00" + qualname
 	if id, ok := in.ids[key]; ok {
 		return id, nil
 	}
-	id, err := in.symbol(kind, name, qualname, path, ls, le, lang, "")
+	id, err := in.symbol(kind, name, qualname, path, ls, le, lang, "", doc)
 	if err == nil {
 		in.ids[key] = id
 	}
 	return id, err
 }
 
-func (in *inserter) symbol(kind, name, qualname, path string, ls, le int, lang, container string) (int64, error) {
-	r, err := in.nodeSt.Exec(kind, name, qualname, nullable(path), ls, le, nullable(lang), nullable(container))
+func (in *inserter) symbol(kind, name, qualname, path string, ls, le int, lang, container, doc string) (int64, error) {
+	r, err := in.nodeSt.Exec(kind, name, qualname, nullable(path), ls, le, nullable(lang), nullable(container), nullable(doc))
 	if err != nil {
 		return 0, err
 	}
 	id, _ := r.LastInsertId()
-	_, err = in.ftsSt.Exec(id, name, splitWords(name+" "+container), qualname, path)
+	_, err = in.ftsSt.Exec(id, name, splitWords(name+" "+container), qualname, path, doc)
 	return id, err
 }
 

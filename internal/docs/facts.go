@@ -125,8 +125,8 @@ func (r *repo) overviewFacts() *Facts {
 			break
 		}
 		hub := c.Hub()
-		f.Line("- %s: %d source files, %d lines, mainly %s; most imported file %s (%d importers) %s",
-			c.Name, len(c.Files), c.Lines, c.MainLang(), hub.Path, c.importersOf(hub), r.whole(f, hub.Path))
+		f.Line("- %s: %d source files, %d lines, mainly %s; most imported file %s (%d importers)%s %s",
+			c.Name, len(c.Files), c.Lines, c.MainLang(), hub.Path, c.importersOf(hub), docSuffix(hub.Doc), r.whole(f, hub.Path))
 	}
 
 	f.Line("\nMost depended-on internal files:")
@@ -210,6 +210,14 @@ func sortedKeys[V any](m map[string]V) []string {
 	return keys
 }
 
+// docSuffix renders a doc comment for a fact line.
+func docSuffix(doc string) string {
+	if doc == "" {
+		return ""
+	}
+	return fmt.Sprintf(" — documented as %q", doc)
+}
+
 // ---- architecture ---------------------------------------------------------
 
 const maxDetailedComponents = 12
@@ -229,6 +237,9 @@ func (r *repo) componentFacts(f *Facts, c *Component) {
 	syms := append([]store.SymbolInfo(nil), c.Symbols...)
 	weight := map[string]int{"class": 0, "struct": 0, "interface": 1, "enum": 2, "type": 3, "function": 4}
 	sort.SliceStable(syms, func(i, j int) bool {
+		if (syms[i].Doc != "") != (syms[j].Doc != "") {
+			return syms[i].Doc != ""
+		}
 		if weight[syms[i].Kind] != weight[syms[j].Kind] {
 			return weight[syms[i].Kind] < weight[syms[j].Kind]
 		}
@@ -241,7 +252,16 @@ func (r *repo) componentFacts(f *Facts, c *Component) {
 		if strings.HasPrefix(y.Name, "_") {
 			continue
 		}
-		f.Line("  defines %s %s in %s %s", y.Kind, y.Name, y.Path, f.Cite(y.Path, y.Line, y.EndLine))
+		f.Line("  defines %s %s in %s%s %s", y.Kind, y.Name, y.Path, docSuffix(y.Doc), f.Cite(y.Path, y.Line, y.EndLine))
+	}
+	// File-level docs (package comments, module docstrings) state intent directly.
+	n := 0
+	for _, fi := range c.Files {
+		if fi.Doc == "" || n == 8 {
+			continue
+		}
+		n++
+		f.Line("  file %s is documented as: %q %s", fi.Path, fi.Doc, r.whole(f, fi.Path))
 	}
 	if hub := c.Hub(); c.importersOf(hub) > 0 {
 		f.Line("  most imported file: %s (%d importers) %s", hub.Path, c.importersOf(hub), r.whole(f, hub.Path))

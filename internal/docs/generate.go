@@ -40,7 +40,7 @@ type DocResult struct {
 	ID       string            `json:"id"`
 	File     string            `json:"file"`
 	Title    string            `json:"title"`
-	Mode     string            `json:"mode"` // "llm", "llm+fallback" or "facts-only"
+	Mode     string            `json:"mode"` // "llm", "llm+fallback", "facts-only" or "deterministic"
 	Fallback int               `json:"fallback_sections,omitempty"`
 	Valid    int               `json:"citations"`
 	Removed  int               `json:"citations_removed"`
@@ -244,7 +244,10 @@ func (g *generator) doc(ctx context.Context, id string) (*DocResult, error) {
 		}
 		body.WriteString(strings.TrimSpace(out) + "\n\n")
 	}
-	res.Coverage = 1 // nothing to ground (deterministic doc)
+	if !hasFacts(parts) {
+		res.Mode = "deterministic" // built from the graph alone; nothing for a model to ground
+	}
+	res.Coverage = 1
 	if res.Mode != "facts-only" && paras == 0 && hasFacts(parts) {
 		res.Coverage = 0
 	}
