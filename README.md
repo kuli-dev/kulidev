@@ -94,13 +94,16 @@ A VS Code-style workbench over the knowledge graph:
   disk since you opened it (git pull, another editor, an agent), you get a conflict and
   choose *Reload from disk* or *Overwrite with mine*. Writes are atomic, and the knowledge
   graph refreshes in the background. `kuli serve --read-only` turns editing off.
+- **Integrated terminal** (**Ctrl+`**): real shells on the server that keep running when
+  you close the panel or the browser; reopening replays their recent output.
 - **Map** (component graph), **Docs** (with stale warnings), **Issues** (broken imports) and
   a **Welcome** overview as tabs or side views. **Ctrl+Shift+F** search, **Ctrl+B** side bar.
 
 It binds to localhost by default because it shows (and edits) your source code. Requests
 must carry a localhost `Host` header (so DNS-rebinding sites can't reach it), writes must be
 same-origin with a custom header, only files recorded by the scan can be read or written,
-and symlinks are never written through. The UI (React +
+and symlinks are never written through. Terminals are off with `--read-only` or
+`--no-terminal`, and on a non-loopback address unless you pass `--allow-remote-terminal`. The UI (React +
 TypeScript + Monaco, `web/`) is embedded in the binary — no Node needed to run it.
 
 ## Use it from your coding agent (MCP)

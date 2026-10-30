@@ -27,6 +27,9 @@ import (
 	"github.com/kuli-dev/kulidev/internal/docs"
 	"github.com/kuli-dev/kulidev/internal/scan"
 	"github.com/kuli-dev/kulidev/internal/store"
+	"github.com/kuli-dev/kulidev/internal/term"
+
+	"github.com/coder/websocket"
 )
 
 // maxFileBytes caps what the file viewer will send.
@@ -46,20 +49,25 @@ type Server struct {
 	scanM sync.Mutex
 
 	readOnly  bool
-	loopback  bool // bound to localhost: only localhost Host headers are accepted
+	loopback  bool          // bound to localhost: only localhost Host headers are accepted
+	terms     *term.Manager // nil when terminals are disabled
 	rescanMu  sync.Mutex
 	rescanDue *time.Timer
 }
 
 // Options tunes a server.
 type Options struct {
-	ReadOnly bool // refuse file writes
-	Loopback bool // listening on a loopback address (enables Host-header checks)
+	ReadOnly  bool // refuse file writes (and terminals)
+	Loopback  bool // listening on a loopback address (enables Host-header checks)
+	Terminals bool // allow shell sessions
 }
 
 // New loads the snapshot and component graph.
 func New(root, dataDir string, st *store.Store, llm docs.Chatter, ui fs.FS, opts Options) (*Server, error) {
 	s := &Server{root: root, dataDir: dataDir, store: st, llm: llm, ui: ui, readOnly: opts.ReadOnly, loopback: opts.Loopback}
+	if opts.Terminals && !opts.ReadOnly {
+		s.terms = term.NewManager(root)
+	}
 	return s, s.reload()
 }
 
@@ -92,6 +100,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/docs/{file}", s.docsGet)
 	mux.HandleFunc("POST /api/ask", s.ask)
 	mux.HandleFunc("POST /api/rescan", s.rescan)
+	mux.HandleFunc("GET /api/terminals", s.termList)
+	mux.HandleFunc("POST /api/terminals", s.termStart)
+	mux.HandleFunc("DELETE /api/terminals/{id}", s.termKill)
+	mux.HandleFunc("GET /api/terminals/{id}/ws", s.termSocket)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { fail(w, http.StatusNotFound, "no such endpoint") })
 	if s.ui != nil {
 		files := http.FileServerFS(s.ui)
@@ -196,6 +208,7 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 		"llm":           s.llm != nil,
 		"model":         modelName(s.llm),
 		"readOnly":      s.readOnly,
+		"terminals":     s.terms != nil,
 	})
 }
 
@@ -615,6 +628,117 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
+}
+
+// Close stops background work (terminal sessions).
+func (s *Server) Close() {
+	if s.terms != nil {
+		s.terms.Close()
+	}
+}
+
+// ---- terminals ---------------------------------------------------------------
+
+func (s *Server) termsOr403(w http.ResponseWriter) bool {
+	if s.terms == nil {
+		fail(w, http.StatusForbidden, "terminals are disabled for this workspace")
+		return false
+	}
+	return true
+}
+
+func (s *Server) termList(w http.ResponseWriter, r *http.Request) {
+	if s.terms == nil {
+		writeJSON(w, map[string]any{"enabled": false, "terminals": []any{}})
+		return
+	}
+	writeJSON(w, map[string]any{"enabled": true, "terminals": s.terms.List()})
+}
+
+func (s *Server) termStart(w http.ResponseWriter, r *http.Request) {
+	if !s.termsOr403(w) {
+		return
+	}
+	var req struct{ Cols, Rows int }
+	json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req)
+	sess, err := s.terms.Start(req.Cols, req.Rows)
+	if errors.Is(err, term.ErrTooMany) {
+		fail(w, http.StatusTooManyRequests, err.Error())
+		return
+	} else if err != nil {
+		fail(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, sess.Info())
+}
+
+func (s *Server) termKill(w http.ResponseWriter, r *http.Request) {
+	if !s.termsOr403(w) {
+		return
+	}
+	if !s.terms.Kill(r.PathValue("id")) {
+		fail(w, http.StatusNotFound, "no such terminal")
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// termSocket streams a session: replayed scrollback, then live output (binary frames);
+// the client sends {"type":"input","data":…} and {"type":"resize","cols":…,"rows":…}.
+// websocket.Accept rejects cross-origin handshakes; guard() already checked Host.
+func (s *Server) termSocket(w http.ResponseWriter, r *http.Request) {
+	if !s.termsOr403(w) {
+		return
+	}
+	sess := s.terms.Get(r.PathValue("id"))
+	if sess == nil {
+		fail(w, http.StatusNotFound, "no such terminal")
+		return
+	}
+	c, err := websocket.Accept(w, r, nil)
+	if err != nil {
+		return
+	}
+	defer c.CloseNow()
+	c.SetReadLimit(64 << 10)
+	ctx := r.Context()
+
+	replay, out, cancel := sess.Subscribe()
+	defer cancel()
+	if len(replay) > 0 {
+		if err := c.Write(ctx, websocket.MessageBinary, replay); err != nil {
+			return
+		}
+	}
+	go func() {
+		for {
+			_, data, err := c.Read(ctx)
+			if err != nil {
+				cancel()
+				return
+			}
+			var msg struct {
+				Type       string
+				Data       string
+				Cols, Rows int
+			}
+			if json.Unmarshal(data, &msg) != nil {
+				continue
+			}
+			switch msg.Type {
+			case "input":
+				sess.Write([]byte(msg.Data))
+			case "resize":
+				sess.Resize(msg.Cols, msg.Rows)
+			}
+		}
+	}()
+	for chunk := range out {
+		if err := c.Write(ctx, websocket.MessageBinary, chunk); err != nil {
+			return
+		}
+	}
+	c.Close(websocket.StatusNormalClosure, "session ended")
 }
 
 func modelName(c docs.Chatter) string {

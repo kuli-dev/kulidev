@@ -9,10 +9,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kuli-dev/kulidev/internal/docs"
 	"github.com/kuli-dev/kulidev/internal/scan"
 	"github.com/kuli-dev/kulidev/internal/store"
+
+	"github.com/coder/websocket"
 )
 
 func setup(t *testing.T) (*httptest.Server, string) {
@@ -293,5 +296,74 @@ func TestDNSRebindingRefused(t *testing.T) {
 	}
 	if code := get(t, ts, "/api/overview", nil); code != 200 {
 		t.Errorf("localhost read = %d", code)
+	}
+}
+
+func TestTerminals(t *testing.T) {
+	t.Setenv("SHELL", "/bin/sh")
+	ts, _ := setupWith(t, Options{Loopback: true, Terminals: true})
+	post := func(path string, header bool) (int, map[string]any) {
+		req, _ := http.NewRequest("POST", ts.URL+path, strings.NewReader(`{"cols":80,"rows":24}`))
+		if header {
+			req.Header.Set("X-Kuli-Request", "1")
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out map[string]any
+		json.NewDecoder(resp.Body).Decode(&out)
+		return resp.StatusCode, out
+	}
+	if code, _ := post("/api/terminals", false); code != http.StatusForbidden {
+		t.Errorf("start without header = %d", code)
+	}
+	code, info := post("/api/terminals", true)
+	if code != 200 || info["id"] == nil {
+		t.Fatalf("start = %d %v", code, info)
+	}
+	id := info["id"].(string)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	wsURL := "ws" + strings.TrimPrefix(ts.URL, "http") + "/api/terminals/" + id + "/ws"
+
+	// A page on another origin cannot attach to the shell.
+	if _, _, err := websocket.Dial(ctx, wsURL, &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {"https://evil.example"}}}); err == nil {
+		t.Error("cross-origin websocket accepted")
+	}
+
+	c, _, err := websocket.Dial(ctx, wsURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.CloseNow()
+	c.Write(ctx, websocket.MessageText, []byte(`{"type":"input","data":"echo from-$((6*7))\n"}`))
+	var got strings.Builder
+	for !strings.Contains(got.String(), "from-42") {
+		_, b, err := c.Read(ctx)
+		if err != nil {
+			t.Fatalf("read: %v (got %q)", err, got.String())
+		}
+		got.Write(b)
+	}
+
+	req, _ := http.NewRequest("DELETE", ts.URL+"/api/terminals/"+id, nil)
+	req.Header.Set("X-Kuli-Request", "1")
+	resp, _ := http.DefaultClient.Do(req)
+	resp.Body.Close()
+	if resp.StatusCode != 200 {
+		t.Errorf("kill = %d", resp.StatusCode)
+	}
+
+	// Read-only workspaces never get a shell.
+	ro, _ := setupWith(t, Options{Loopback: true, ReadOnly: true, Terminals: true})
+	req, _ = http.NewRequest("POST", ro.URL+"/api/terminals", nil)
+	req.Header.Set("X-Kuli-Request", "1")
+	resp, _ = http.DefaultClient.Do(req)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("read-only terminal = %d", resp.StatusCode)
 	}
 }

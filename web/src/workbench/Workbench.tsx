@@ -11,6 +11,7 @@ import { DocTab } from "./DocTab";
 import { clearFileCache, tabTitle, type NewTab, type Tab } from "./files";
 import { Icon } from "./Icons";
 import { QuickOpen } from "./QuickOpen";
+import { TerminalPanel } from "./Terminal";
 import { DocsPane, Explorer, IssuesPane, SearchPane } from "./SidePanes";
 
 type View = "explorer" | "search" | "docs" | "issues";
@@ -39,6 +40,8 @@ export function Workbench() {
   const [chat, setChat] = useState(false);
   const [quick, setQuick] = useState(false);
   const [cursor, setCursor] = useState<Cursor | null>(null);
+  const [termOpen, setTermOpen] = useState(false);
+  const [termH, setTermH] = useState(280);
   const [scan, setScan] = useState<"idle" | "busy" | string>("idle");
   const [dirty, setDirty] = useState<Set<string>>(() => new Set());
   const markDirty = useCallback((path: string, d: boolean) => {
@@ -125,7 +128,8 @@ export function Workbench() {
       const mod = e.ctrlKey || e.metaKey;
       if (!mod) return;
       const k = e.key.toLowerCase();
-      if (k === "p" && !e.shiftKey) { e.preventDefault(); setQuick(true); }
+      if (e.key === "`" || e.code === "Backquote") { e.preventDefault(); if (ov.data?.terminals) setTermOpen((o) => !o); }
+      else if (k === "p" && !e.shiftKey) { e.preventDefault(); setQuick(true); }
       else if (k === "f" && e.shiftKey) { e.preventDefault(); setView("search"); }
       else if (k === "b") { e.preventDefault(); setView((v) => (v ? null : "explorer")); }
       else if (k === "l") { e.preventDefault(); setChat((c) => !c); }
@@ -215,6 +219,7 @@ export function Workbench() {
           {current?.kind === "doc" && <DocTab name={current.name} />}
           {current?.kind === "welcome" && <div className="welcome-tab"><OverviewView ov={ov} onRescan={rescan} /></div>}
         </div>
+        {termOpen && ov.data?.terminals && <TerminalPanel height={termH} onResize={setTermH} onClose={() => setTermOpen(false)} />}
       </section>
 
       {chat && <Chat enabled={ov.data?.llm ?? false} model={ov.data?.model} onClose={() => setChat(false)} />}
@@ -230,6 +235,9 @@ export function Workbench() {
         {cursor && <span>{cursor.lang}</span>}
         <span>{ov.data?.llm ? `Model: ${ov.data.model}` : "No model"}</span>
         {dirty.size > 0 && <span className="st-warn">{dirty.size} unsaved</span>}
+        {ov.data?.terminals && (
+          <button className="st-btn" onClick={() => setTermOpen((o) => !o)} title="Toggle terminal (Ctrl+`)">Terminal</button>
+        )}
         <span>{ov.data?.readOnly ? "Read-only" : "Ctrl+S saves"}</span>
       </footer>
 
@@ -247,6 +255,7 @@ function EmptyEditor({ onQuick }: { onQuick: () => void }) {
         <li>Search definitions <kbd>Ctrl</kbd> <kbd>Shift</kbd> <kbd>F</kbd></li>
         <li>Ask Kuli <kbd>Ctrl</kbd> <kbd>L</kbd></li>
         <li>Toggle side bar <kbd>Ctrl</kbd> <kbd>B</kbd></li>
+        <li>Terminal <kbd>Ctrl</kbd> <kbd>`</kbd></li>
       </ul>
     </div>
   );

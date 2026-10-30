@@ -20,9 +20,11 @@ import (
 
 func newServeCmd(o *options) *cobra.Command {
 	var (
-		addr     string
-		readOnly bool
-		lf       llmFlags
+		addr        string
+		readOnly    bool
+		noTerminal  bool
+		remoteShell bool
+		lf          llmFlags
 	)
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -55,9 +57,16 @@ only on a network you trust. Run 'kuli scan' first.`,
 			}
 			host, _, _ := net.SplitHostPort(addr)
 			loopback := host == "127.0.0.1" || host == "localhost" || host == "::1"
-			srv, err := server.New(root, dir, st, model, web.FS(), server.Options{ReadOnly: readOnly, Loopback: loopback})
+			// A terminal is remote code execution for anyone who can reach the port:
+			// on a network address it needs an explicit opt-in.
+			terminals := !noTerminal && !readOnly && (loopback || remoteShell)
+			srv, err := server.New(root, dir, st, model, web.FS(), server.Options{ReadOnly: readOnly, Loopback: loopback, Terminals: terminals})
 			if err != nil {
 				return err
+			}
+			defer srv.Close()
+			if !loopback && !terminals && !noTerminal && !readOnly {
+				fmt.Fprintln(os.Stderr, "kuli: terminals are off on a network address; add --allow-remote-terminal only on a network you trust")
 			}
 			if !loopback {
 				what := "read and edit"
@@ -88,7 +97,9 @@ only on a network you trust. Run 'kuli scan' first.`,
 		},
 	}
 	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1:7878", "listen address")
-	cmd.Flags().BoolVar(&readOnly, "read-only", false, "browse only: refuse to save files")
+	cmd.Flags().BoolVar(&readOnly, "read-only", false, "browse only: refuse to save files and open terminals")
+	cmd.Flags().BoolVar(&noTerminal, "no-terminal", false, "disable the integrated terminal")
+	cmd.Flags().BoolVar(&remoteShell, "allow-remote-terminal", false, "allow terminals when listening on a non-loopback address (anyone who can reach it gets a shell)")
 	lf.add(cmd, 2048)
 	return cmd
 }

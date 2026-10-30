@@ -7,7 +7,7 @@ export type Overview = {
   repo: string; root: string; commit: string; head: string; stale: boolean; scannedAt: string;
   files: number; parsed: number; languages: Count[] | null; symbols: Count[] | null;
   internalEdges: number; externalMods: number; topInternal: Count[] | null; topExternal: Count[] | null;
-  manifests: Count[] | null; llm: boolean; model?: string; readOnly?: boolean;
+  manifests: Count[] | null; llm: boolean; model?: string; readOnly?: boolean; terminals?: boolean;
 };
 
 export type GraphNode = { name: string; files: number; lines: number; lang: string; hub: string; hubImporters: number; hubDoc?: string };
@@ -32,6 +32,8 @@ export type DocItem = {
 };
 
 export type TreeFile = { p: string; l?: string; n: number };
+
+export type TermInfo = { id: string; title: string; started: string; exited: boolean; exitCode: number };
 
 export type AskResult = { answer: string; keywords: string[]; citations: number; removed: number; coverage: number; hits: number };
 
@@ -70,5 +72,9 @@ export const api = {
       method: "PUT", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ path, content, baseHash, force }),
     }),
+  terminals: () => call<{ enabled: boolean; terminals: TermInfo[] }>("api/terminals"),
+  startTerminal: (cols: number, rows: number) =>
+    call<TermInfo>("api/terminals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cols, rows }) }),
+  killTerminal: (id: string) => call<{ ok: boolean }>(`api/terminals/${q(id)}`, { method: "DELETE" }),
   rescan: () => call<{ files: number; ms: number }>("api/rescan", { method: "POST" }),
 };
