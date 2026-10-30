@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/kuli-dev/kulidev/internal/model"
@@ -39,18 +40,34 @@ type Result struct {
 	Imports   []ImportEdge
 }
 
+// Progress reports scan progress: phase is "listing", "reading" (done of total files
+// parsed) or "saving". It may be called from several goroutines at once.
+type Progress func(phase string, done, total int)
+
+func (p Progress) report(phase string, done, total int) {
+	if p != nil {
+		p(phase, done, total)
+	}
+}
+
 // Scan analyses the repository at root.
-func Scan(root string) (*Result, error) {
+func Scan(root string) (*Result, error) { return ScanProgress(root, nil) }
+
+// ScanProgress is Scan reporting its progress.
+func ScanProgress(root string, prog Progress) (*Result, error) {
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
 	}
 	start := time.Now()
+	prog.report("listing", 0, 0)
 	paths, err := listFiles(root)
 	if err != nil {
 		return nil, err
 	}
 	sort.Strings(paths)
+	var parsed atomic.Int64
+	prog.report("reading", 0, len(paths))
 
 	res := &Result{Root: root, Commit: GitCommit(root), Started: start}
 	res.Files = make([]model.FileResult, len(paths))
@@ -75,6 +92,7 @@ func Scan(root string) (*Result, error) {
 			defer p.Close()
 			for i := range jobs {
 				fr, man := analyzeFile(p, root, paths[i])
+				prog.report("reading", int(parsed.Add(1)), len(paths))
 				res.Files[i] = fr
 				if man != "" {
 					mu.Lock()

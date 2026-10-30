@@ -28,24 +28,35 @@ func (s Summary) String() string {
 // Refresh brings the knowledge base up to date with the tree at root: incrementally
 // when a previous scan exists, otherwise (or when full is set) by rebuilding.
 func (s *Store) Refresh(root string, full bool) (Summary, error) {
+	return s.RefreshProgress(root, full, nil)
+}
+
+// RefreshProgress is Refresh reporting its progress.
+func (s *Store) RefreshProgress(root string, full bool, prog scan.Progress) (Summary, error) {
 	start := time.Now()
 	prev, err := s.Stamps()
 	if err != nil {
 		return Summary{}, err
 	}
 	if full || len(prev) == 0 {
-		res, err := scan.Scan(root)
+		res, err := scan.ScanProgress(root, prog)
 		if err != nil {
 			return Summary{}, err
+		}
+		if prog != nil {
+			prog("saving", len(res.Files), len(res.Files))
 		}
 		if _, err := s.Save(res); err != nil {
 			return Summary{}, err
 		}
 		return Summary{Full: true, Files: len(res.Files), Parsed: len(res.Files), Duration: time.Since(start)}, nil
 	}
-	d, err := scan.Incremental(root, prev)
+	d, err := scan.IncrementalProgress(root, prev, prog)
 	if err != nil {
 		return Summary{}, err
+	}
+	if prog != nil {
+		prog("saving", len(d.Changed), len(d.Changed))
 	}
 	if err := s.ApplyDelta(d); err != nil {
 		return Summary{}, err

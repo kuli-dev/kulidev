@@ -12,7 +12,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"time"
@@ -22,6 +21,7 @@ import (
 	"github.com/kuli-dev/kulidev/internal/cli"
 	"github.com/kuli-dev/kulidev/internal/docs"
 	"github.com/kuli-dev/kulidev/internal/llm"
+	"github.com/kuli-dev/kulidev/internal/proc"
 	"github.com/kuli-dev/kulidev/internal/server"
 	"github.com/kuli-dev/kulidev/internal/web"
 )
@@ -45,7 +45,8 @@ func main() {
 	})
 	defer hub.Close()
 	if len(os.Args) > 1 {
-		if _, err := hub.Open(os.Args[1], ""); err != nil {
+		// In the background: the window shows at once, with the progress.
+		if err := hub.StartOpen(os.Args[1]); err != nil {
 			log.Printf("open %s: %v", os.Args[1], err) // the Open Folder screen shows instead
 		}
 	}
@@ -80,8 +81,8 @@ func main() {
 func openBrowser(url string) {
 	switch runtime.GOOS {
 	case "windows":
-		exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+		proc.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
 	case "darwin":
-		exec.Command("open", url).Start()
+		proc.Command("open", url).Start()
 	}
 }

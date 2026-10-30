@@ -32,6 +32,23 @@ type Host struct {
 	curH    http.Handler
 	curSt   *store.Store
 	opening sync.Mutex
+
+	jobMu sync.Mutex
+	job   *OpenJob // the latest open, for the progress bar
+}
+
+// OpenJob is the progress of opening a folder.
+type OpenJob struct {
+	Path  string `json:"path"`
+	Name  string `json:"name"`
+	Phase string `json:"phase"` // listing, reading, saving, done, error
+	Done  int    `json:"done"`
+	Total int    `json:"total"`
+	// Ready: the workspace is usable (a folder opened before is usable at once while
+	// it is brought up to date).
+	Ready bool   `json:"ready"`
+	First bool   `json:"first"` // never scanned before: everything is read
+	Error string `json:"error,omitempty"`
 }
 
 // HostOptions configures a host.
@@ -62,44 +79,127 @@ func (h *Host) Root() string {
 }
 
 // Open scans root (incrementally when it was scanned before) and makes it the
-// workspace, closing the previous one. dataDir "" means root/.kulidev.
+// workspace, closing the previous one. dataDir "" means root/.kulidev. It returns when
+// the folder is fully up to date; StartOpen is the asynchronous form.
 func (h *Host) Open(root, dataDir string) (store.Summary, error) {
-	h.opening.Lock()
-	defer h.opening.Unlock()
-	root, err := filepath.Abs(root)
+	root, err := checkFolder(root)
 	if err != nil {
 		return store.Summary{}, err
 	}
-	info, err := os.Stat(root)
-	if err != nil || !info.IsDir() {
-		return store.Summary{}, errors.New("that folder does not exist")
+	return h.open(root, dataDir)
+}
+
+// StartOpen opens a folder in the background; Job reports its progress.
+func (h *Host) StartOpen(root string) error {
+	root, err := checkFolder(root)
+	if err != nil {
+		return err
 	}
+	h.jobMu.Lock()
+	if h.job != nil && h.job.Phase != "done" && h.job.Phase != "error" {
+		h.jobMu.Unlock()
+		return errors.New("another folder is still opening")
+	}
+	h.job = &OpenJob{Path: root, Name: filepath.Base(root), Phase: "listing"}
+	h.jobMu.Unlock()
+	go func() {
+		if _, err := h.open(root, ""); err != nil {
+			log.Printf("open %s: %v", root, err)
+		}
+	}()
+	return nil
+}
+
+// Job returns the progress of the latest open (nil when none).
+func (h *Host) Job() *OpenJob {
+	h.jobMu.Lock()
+	defer h.jobMu.Unlock()
+	if h.job == nil {
+		return nil
+	}
+	j := *h.job
+	return &j
+}
+
+func (h *Host) setJob(f func(j *OpenJob)) {
+	h.jobMu.Lock()
+	defer h.jobMu.Unlock()
+	if h.job != nil {
+		f(h.job)
+	}
+}
+
+func checkFolder(root string) (string, error) {
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return "", err
+	}
+	if info, err := os.Stat(root); err != nil || !info.IsDir() {
+		return "", errors.New("that folder does not exist")
+	}
+	return root, nil
+}
+
+func (h *Host) open(root, dataDir string) (sum store.Summary, err error) {
+	h.opening.Lock()
+	defer h.opening.Unlock()
+	defer func() {
+		if err != nil {
+			h.setJob(func(j *OpenJob) { j.Phase, j.Error = "error", err.Error() })
+		}
+	}()
+	h.jobMu.Lock()
+	if h.job == nil || h.job.Path != root {
+		h.job = &OpenJob{Path: root, Name: filepath.Base(root), Phase: "listing"}
+	}
+	h.jobMu.Unlock()
+	prog := func(phase string, done, total int) {
+		h.setJob(func(j *OpenJob) { j.Phase, j.Done, j.Total = phase, done, total })
+	}
+
 	if dataDir == "" {
 		dataDir = filepath.Join(root, ".kulidev")
 	}
 	st, err := store.Open(dataDir)
 	if err != nil {
-		return store.Summary{}, err
+		return sum, err
 	}
-	sum, err := st.Refresh(root, false)
+	known, err := st.Stamps()
 	if err != nil {
 		st.Close()
-		return store.Summary{}, err
+		return sum, err
+	}
+	first := len(known) == 0
+	h.setJob(func(j *OpenJob) { j.First = first })
+	if first {
+		// Nothing to show yet: read everything, then switch.
+		if sum, err = st.RefreshProgress(root, false, prog); err != nil {
+			st.Close()
+			return sum, err
+		}
 	}
 	srv, err := New(root, dataDir, st, h.llm, h.ui, h.opts)
 	if err != nil {
 		st.Close()
-		return store.Summary{}, err
+		return sum, err
 	}
 	h.mu.Lock()
 	old, oldSt := h.cur, h.curSt
 	h.cur, h.curH, h.curSt = srv, srv.Handler(), st
 	h.mu.Unlock()
+	h.setJob(func(j *OpenJob) { j.Ready = true })
 	if old != nil {
 		old.Close()
 		oldSt.Close()
 	}
 	h.remember(root)
+	if !first {
+		// Usable already from what was read last time; now catch up with changes.
+		if sum, err = srv.refresh(prog); err != nil {
+			return sum, err
+		}
+	}
+	h.setJob(func(j *OpenJob) { j.Phase = "done" })
 	log.Printf("opened %s (%s)", root, sum)
 	return sum, nil
 }
@@ -243,7 +343,7 @@ func (h *Host) workspaceInfo(w http.ResponseWriter, r *http.Request) {
 	root := h.Root()
 	writeJSON(w, map[string]any{
 		"open": root != "", "root": root, "name": filepath.Base(root),
-		"canOpen": h.canOpen, "recent": h.loadRecent(), "os": runtime.GOOS,
+		"canOpen": h.canOpen, "recent": h.loadRecent(), "os": runtime.GOOS, "opening": h.Job(),
 	})
 }
 
@@ -255,12 +355,11 @@ func (h *Host) openHandler(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "path required")
 		return
 	}
-	sum, err := h.Open(strings.TrimSpace(req.Path), "")
-	if err != nil {
+	if err := h.StartOpen(strings.TrimSpace(req.Path)); err != nil {
 		fail(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, map[string]any{"root": h.Root(), "files": sum.Files, "ms": sum.Duration.Milliseconds(), "full": sum.Full})
+	writeJSON(w, map[string]any{"opening": h.Job()})
 }
 
 func (h *Host) closeHandler(w http.ResponseWriter, r *http.Request) {

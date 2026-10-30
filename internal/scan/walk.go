@@ -3,10 +3,11 @@ package scan
 import (
 	"bytes"
 	"io/fs"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"strings"
+
+	"github.com/kuli-dev/kulidev/internal/proc"
 )
 
 // Directories never worth scanning, even when they are not git-ignored.
@@ -54,7 +55,7 @@ func listFiles(root string) ([]string, error) {
 }
 
 func gitFiles(root string) ([]string, bool) {
-	cmd := exec.Command("git", "-C", root, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+	cmd := proc.Command("git", "-C", root, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
 	b, err := cmd.Output()
 	if err != nil {
 		return nil, false
@@ -75,7 +76,7 @@ func gitFiles(root string) ([]string, bool) {
 
 // GitCommit returns HEAD's commit hash, or "" outside a git repo.
 func GitCommit(root string) string {
-	b, err := exec.Command("git", "-C", root, "rev-parse", "HEAD").Output()
+	b, err := proc.Command("git", "-C", root, "rev-parse", "HEAD").Output()
 	if err != nil {
 		return ""
 	}

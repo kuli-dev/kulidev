@@ -8,12 +8,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kuli-dev/kulidev/internal/proc"
 )
 
 // Repo is a git working tree.
@@ -50,7 +51,7 @@ var ErrNotRepo = errors.New("not a git repository")
 func (r Repo) run(ctx context.Context, stdin []byte, args ...string) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", r.Root}, args...)...)
+	cmd := proc.CommandContext(ctx, "git", append([]string{"-C", r.Root}, args...)...)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_OPTIONAL_LOCKS=0", "LC_ALL=C")
 	if stdin != nil {
 		cmd.Stdin = bytes.NewReader(stdin)

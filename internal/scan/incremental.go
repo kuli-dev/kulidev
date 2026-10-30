@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/kuli-dev/kulidev/internal/model"
@@ -50,11 +51,18 @@ func (d *Delta) Resolve(lang, from, spec string, maybeSymbol bool) Target {
 
 // Incremental compares the tree with prev and parses only what changed.
 func Incremental(root string, prev map[string]Stamp) (*Delta, error) {
+	return IncrementalProgress(root, prev, nil)
+}
+
+// IncrementalProgress is Incremental reporting its progress (files re-read of those
+// that changed).
+func IncrementalProgress(root string, prev map[string]Stamp, prog Progress) (*Delta, error) {
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
 	}
 	start := time.Now()
+	prog.report("listing", 0, 0)
 	paths, err := listFiles(root)
 	if err != nil {
 		return nil, err
@@ -98,6 +106,8 @@ func Incremental(root string, prev map[string]Stamp) (*Delta, error) {
 	sort.Strings(d.Deleted)
 
 	d.Changed = make([]model.FileResult, len(todo))
+	var parsed atomic.Int64
+	prog.report("reading", 0, len(todo))
 	manifests := make([]string, len(todo))
 	jobs := make(chan int)
 	var wg sync.WaitGroup
@@ -119,6 +129,7 @@ func Incremental(root string, prev map[string]Stamp) (*Delta, error) {
 			defer p.Close()
 			for i := range jobs {
 				d.Changed[i], manifests[i] = analyzeFile(p, root, todo[i])
+				prog.report("reading", int(parsed.Add(1)), len(todo))
 			}
 		}()
 	}

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/kuli-dev/kulidev/internal/auth"
 )
@@ -57,14 +58,18 @@ func TestHostOpenSwitchClose(t *testing.T) {
 		t.Errorf("fs list = %v", list)
 	}
 
-	if code, out := call(t, ts, "POST", "/api/workspace/open", `{"path":`+jsonStr(a)+`}`); code != 200 || out["full"] != true {
+	if code, out := call(t, ts, "POST", "/api/workspace/open", `{"path":`+jsonStr(a)+`}`); code != 200 || out["opening"] == nil {
 		t.Fatalf("open alpha = %d %v", code, out)
+	}
+	if j := waitOpened(t, h); !j.First || j.Total != 1 || j.Done != 1 {
+		t.Errorf("first open progress = %+v", j)
 	}
 	if _, sr := call(t, ts, "GET", "/api/search?q=alpha_entry", ""); !strings.Contains(asJSON(sr), "alpha_entry") {
 		t.Errorf("search in alpha = %v", sr)
 	}
 	// Switch to beta: alpha's code is gone, beta's is there.
 	call(t, ts, "POST", "/api/workspace/open", `{"path":`+jsonStr(b)+`}`)
+	waitOpened(t, h)
 	if _, sr := call(t, ts, "GET", "/api/search?q=beta_entry", ""); !strings.Contains(asJSON(sr), "beta_entry") {
 		t.Errorf("search in beta = %v", sr)
 	}
@@ -79,6 +84,11 @@ func TestHostOpenSwitchClose(t *testing.T) {
 	}
 	if code, _ := call(t, ts, "POST", "/api/workspace/open", `{"path":"/definitely/not/here"}`); code != 400 {
 		t.Errorf("open missing folder = %d", code)
+	}
+	// Reopening a folder read before is usable at once and only re-reads changes.
+	call(t, ts, "POST", "/api/workspace/open", `{"path":`+jsonStr(a)+`}`)
+	if j := waitOpened(t, h); j.First || j.Done != 0 {
+		t.Errorf("reopen progress = %+v", j)
 	}
 	call(t, ts, "POST", "/api/workspace/close", "")
 	if _, info := call(t, ts, "GET", "/api/workspace", ""); info["open"] != false {
@@ -113,6 +123,22 @@ func TestHostLauncherIsLocalOnly(t *testing.T) {
 	if code, _ := call(t, rs, "GET", "/api/fs/list", ""); code == 200 {
 		t.Error("remote host lists folders")
 	}
+}
+
+func waitOpened(t *testing.T, h *Host) OpenJob {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if j := h.Job(); j != nil && (j.Phase == "done" || j.Phase == "error") {
+			if j.Phase == "error" || !j.Ready {
+				t.Fatalf("open failed: %+v", j)
+			}
+			return *j
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("open did not finish")
+	return OpenJob{}
 }
 
 func jsonStr(s string) string { b, _ := json.Marshal(s); return string(b) }

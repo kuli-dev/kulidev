@@ -7,6 +7,9 @@
 - **Open folder**: start without a repository and pick one (recent folders, a folder browser
   that marks repositories, drive letters on Windows); switch folders from the workbench.
   Local only — remote and paired devices stay on the folder they were given.
+- Opening a folder shows the full workbench straight away with a progress bar (files
+  read of total); a folder opened before is usable at once while it catches up.
+- Windows: no more console windows flashing up when KuliDev runs git.
 - `kuli serve` without `-C` opens the current folder if it was scanned, otherwise the
   folder picker; opening a folder scans it (incrementally after the first time).
 

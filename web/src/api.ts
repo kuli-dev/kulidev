@@ -46,7 +46,13 @@ export type GitChange = { path: string; origPath?: string; index: string; worktr
 export type GitStatus = { git: boolean; branch: string; upstream?: string; ahead: number; behind: number; initial: boolean; changes: GitChange[] };
 
 export type RecentFolder = { path: string; name: string; opened: string; exists: boolean };
-export type WorkspaceInfo = { open: boolean; root: string; name: string; canOpen: boolean; recent: RecentFolder[] | null; os: string };
+export type OpenJob = {
+  path: string; name: string; phase: "listing" | "reading" | "saving" | "done" | "error";
+  done: number; total: number; ready: boolean; first: boolean; error?: string;
+};
+export type WorkspaceInfo = {
+  open: boolean; root: string; name: string; canOpen: boolean; recent: RecentFolder[] | null; os: string; opening: OpenJob | null;
+};
 export type DirList = { path: string; parent: string; home: string; isRepo: boolean; dirs: { name: string; path: string; isRepo: boolean }[]; drives?: string[] };
 
 export type AskResult = { answer: string; keywords: string[]; citations: number; removed: number; coverage: number; hits: number };
@@ -117,7 +123,7 @@ export const api = {
   workspace: () => call<WorkspaceInfo>("api/workspace"),
   fsList: (path: string) => call<DirList>(`api/fs/list?path=${q(path)}`),
   openWorkspace: (path: string) =>
-    call<{ root: string; files: number; ms: number; full: boolean }>("api/workspace/open", {
+    call<{ opening: OpenJob }>("api/workspace/open", {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }),
     }),
   closeWorkspace: () => call<{ ok: boolean }>("api/workspace/close", { method: "POST" }),

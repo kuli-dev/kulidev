@@ -11,6 +11,7 @@ import { DocTab } from "./DocTab";
 import { clearFileCache, tabTitle, type NewTab, type Tab } from "./files";
 import { Icon } from "./Icons";
 import { DevicesPane } from "./Pair";
+import { FolderDialog, ProgressBar, isOpening, progressText, useWorkspace } from "./workspace";
 import { QuickOpen } from "./QuickOpen";
 
 import { ChangesPane } from "./Changes";
@@ -107,16 +108,32 @@ export function Workbench() {
   }
   const [scan, setScan] = useState<"idle" | "busy" | string>("idle");
   const [dirty, setDirty] = useState<Set<string>>(() => new Set());
-  const [canSwitch, setCanSwitch] = useState(false);
+  // Open Folder: the current folder stays usable until the new one is ready.
+  const ws = useWorkspace();
+  const canSwitch = !!ws.info?.canOpen;
+  const [browse, setBrowse] = useState(false);
+  const job = ws.job;
+  const root = ov.data?.root;
+  const lastPhase = useRef(job?.phase);
   useEffect(() => {
-    api.workspace().then((w) => setCanSwitch(w.canOpen), () => {});
-  }, []);
-  async function openAnotherFolder() {
+    if (!job || !root) return;
+    if (job.ready && job.path !== root && ws.info?.root === job.path) {
+      location.hash = "#/";
+      location.reload(); // the new folder is ready: start fresh on it
+    } else if (job.path === root && job.phase === "done" && lastPhase.current !== "done") {
+      clearFileCache(); // caught up with changes since last time
+      clearDefinitionCache();
+      ov.reload();
+      tree.reload();
+    }
+    lastPhase.current = job.phase;
+  }, [job, root, ws.info?.root]); // eslint-disable-line react-hooks/exhaustive-deps
+  function pickFolder(path: string) {
+    setBrowse(false);
     if (dirty.size > 0 && !confirm(`${dirty.size} file(s) have unsaved changes that will be lost. Open another folder anyway?`)) return;
-    await api.closeWorkspace().catch(() => {});
-    location.hash = "#/";
-    location.reload();
+    ws.open(path);
   }
+  const openingNow = isOpening(job) ? job : null;
   const markDirty = useCallback((path: string, d: boolean) => {
     setDirty((cur) => {
       if (cur.has(path) === d) return cur;
@@ -211,6 +228,7 @@ export function Workbench() {
       else if (k === "g" && e.shiftKey) { e.preventDefault(); setView("changes"); }
       else if (k === "b") { e.preventDefault(); setView((v) => (v ? null : "explorer")); }
       else if (k === "l") { e.preventDefault(); setChat((c) => !c); }
+      else if (k === "o" && canSwitch) { e.preventDefault(); setBrowse(true); }
       else if (k === "w" && e.altKey) { e.preventDefault(); closeTab(active); }
     };
     addEventListener("keydown", key);
@@ -288,6 +306,7 @@ export function Workbench() {
       )}
 
       <section className="editor-area" aria-label="Editor">
+        {openingNow && <ProgressBar job={openingNow} className="edge" />}
         <div className="tabs" role="tablist">
           {tabs.map((t) => (
             <div key={t.id} role="tab" aria-selected={t.id === active} className={`tab ${t.id === active ? "on" : ""}`}
@@ -328,7 +347,7 @@ export function Workbench() {
           )}
           {current?.kind === "welcome" && (
             <div className="welcome-tab">
-              {canSwitch && <button className="btn switch-folder" onClick={openAnotherFolder}>Open another folder</button>}
+              {canSwitch && <button className="btn switch-folder" onClick={() => setBrowse(true)}>Open Folder…</button>}
               <OverviewView ov={ov} onRescan={rescan} />
             </div>
           )}
@@ -344,7 +363,7 @@ export function Workbench() {
 
       <footer className="status" aria-label="Status">
         {canSwitch ? (
-          <button className="st-btn st-repo" onClick={openAnotherFolder} title="Open another folder">{repo}</button>
+          <button className="st-btn st-repo" onClick={() => setBrowse(true)} title="Open Folder (Ctrl+O)">{repo}</button>
         ) : (
           <span className="st-repo">{repo}</span>
         )}
@@ -352,6 +371,12 @@ export function Workbench() {
         {ov.data?.stale && <span className="st-warn">{narrow ? "Stale" : "New commits since scan"}</span>}
         <button className="st-btn" onClick={rescan} disabled={scan === "busy"}>{scan === "busy" ? "Scanning…" : "Rescan"}</button>
         {scan !== "idle" && scan !== "busy" && <span>{scan}</span>}
+        {openingNow && (
+          <span className="st-progress" title={progressText(openingNow)}>
+            <ProgressBar job={openingNow} />
+            <span>{openingNow.path === root ? progressText(openingNow) : `Opening ${openingNow.name}: ${progressText(openingNow)}`}</span>
+          </span>
+        )}
         <span className="st-gap" />
         {cursor && <span className="st-wide">Ln {cursor.line}, Col {cursor.col}</span>}
         {cursor && <span className="st-wide">{cursor.lang}</span>}
@@ -363,6 +388,7 @@ export function Workbench() {
         <span className="st-wide">{ov.data?.readOnly ? "Read-only" : "Ctrl+S saves"}</span>
       </footer>
 
+      {browse && <FolderDialog onPick={pickFolder} onClose={() => setBrowse(false)} />}
       {quick && <QuickOpen files={files} onClose={() => setQuick(false)} onPick={(p) => { setQuick(false); openFile(p); }} />}
     </div>
   );

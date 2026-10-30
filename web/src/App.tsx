@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "./api";
 import { Launcher } from "./workbench/Launcher";
 import { PairScreen } from "./workbench/Pair";
@@ -36,8 +36,9 @@ export function App() {
     };
   }, []);
   const enter = () => { location.hash = "#/"; location.reload(); };
+  const opened = useCallback(() => { location.hash = "#/"; setState("ok"); }, []);
   if (state === "checking") return null;
-  if (state === "launcher") return <Launcher onOpened={enter} />;
+  if (state === "launcher") return <Launcher onOpened={opened} />;
   if (state === "pair") return <PairScreen onPaired={enter} />;
   return <Workbench />;
 }

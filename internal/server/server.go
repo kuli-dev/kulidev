@@ -570,15 +570,30 @@ func (s *Server) rescanNow(wait bool) (int, time.Duration, error) {
 		return 0, 0, errScanBusy
 	}
 	defer s.scanM.Unlock()
-	sum, err := s.store.Refresh(s.root, false)
+	sum, err := s.refreshLocked(nil)
+	if err != nil {
+		return 0, 0, err
+	}
+	return sum.Files, sum.Duration, nil
+}
+
+// refresh brings the knowledge base up to date, reporting progress.
+func (s *Server) refresh(prog scan.Progress) (store.Summary, error) {
+	s.scanM.Lock()
+	defer s.scanM.Unlock()
+	return s.refreshLocked(prog)
+}
+
+func (s *Server) refreshLocked(prog scan.Progress) (store.Summary, error) {
+	sum, err := s.store.RefreshProgress(s.root, false, prog)
 	if err == nil {
 		err = s.reload()
 	}
 	if err != nil {
-		return 0, 0, err
+		return store.Summary{}, err
 	}
 	log.Printf("refreshed %s: %s", s.root, sum)
-	return sum.Files, sum.Duration, nil
+	return sum, nil
 }
 
 // scheduleRescan refreshes the knowledge base shortly after edits, coalescing bursts
@@ -890,10 +905,19 @@ func (s *Server) deviceRevoke(w http.ResponseWriter, r *http.Request) {
 }
 
 // Close stops background work (terminal sessions).
+// Close stops the workspace's terminals and waits for a running scan, so the store can
+// be closed after it.
 func (s *Server) Close() {
+	s.rescanMu.Lock()
+	if s.rescanDue != nil {
+		s.rescanDue.Stop()
+	}
+	s.rescanMu.Unlock()
 	if s.terms != nil {
 		s.terms.Close()
 	}
+	s.scanM.Lock()
+	s.scanM.Unlock()
 }
 
 // ---- terminals ---------------------------------------------------------------

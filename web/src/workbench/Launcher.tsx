@@ -1,112 +1,114 @@
 import { useEffect, useState } from "react";
-import { api, type DirList, type WorkspaceInfo } from "../api";
+import { Icon } from "./Icons";
+import { FolderDialog, OpeningCard, ProgressBar, RecentList, isOpening, progressText, useWorkspace } from "./workspace";
 
-// "Open folder": recent folders and a folder browser. Picking a folder scans it (fast
-// when it was scanned before) and opens the workbench on it.
+// The workbench with no folder open, like an empty editor window: open a folder or a
+// recent one; opening shows its progress and switches to the full workbench when ready.
 export function Launcher({ onOpened }: { onOpened: () => void }) {
-  const [info, setInfo] = useState<WorkspaceInfo | null>(null);
-  const [list, setList] = useState<DirList | null>(null);
-  const [pathInput, setPathInput] = useState("");
-  const [busy, setBusy] = useState("");
-  const [error, setError] = useState("");
-
-  async function browse(path: string) {
-    setError("");
-    try {
-      const l = await api.fsList(path);
-      setList(l);
-      setPathInput(l.path);
-    } catch (e) {
-      setError((e as Error).message);
-    }
-  }
+  const ws = useWorkspace();
+  const [browse, setBrowse] = useState(false);
+  const job = ws.job;
+  const opening = isOpening(job) && !job.ready;
 
   useEffect(() => {
-    api.workspace().then(setInfo, () => {});
-    browse("");
+    if (ws.info?.open && job?.ready) onOpened();
+  }, [ws.info?.open, job?.ready, onOpened]);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "o") {
+        e.preventDefault();
+        setBrowse(true);
+      }
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
   }, []);
 
-  async function open(path: string) {
-    const name = path.split(/[\\/]/).filter(Boolean).pop() ?? path;
-    setBusy(name);
-    setError("");
-    try {
-      await api.openWorkspace(path);
-      onOpened();
-    } catch (e) {
-      setError((e as Error).message);
-      setBusy("");
-    }
-  }
-
-  const recent = (info?.recent ?? []).filter((r) => r.exists);
+  const pick = (path: string) => {
+    setBrowse(false);
+    ws.open(path);
+  };
+  const failed = job?.phase === "error" ? job.error : "";
+  const idle = [Icon.search, Icon.git, Icon.docs, Icon.issues];
   return (
-    <main className="launcher">
-      <div className="launcher-col">
-        <p className="wordmark-big">kuli<span>dev</span></p>
-        <p className="muted">Open a project folder. KuliDev reads it once and keeps its map up to date; folders you opened before open instantly.</p>
-        {error && <p className="notice warn" role="alert">{error}</p>}
+    <div className="wb">
+      <nav className="activity" aria-label="Views">
+        <span className="act-mark" aria-hidden="true">k</span>
+        <button className="act on" title="Explorer" aria-label="Explorer" aria-pressed="true"><Icon.files /></button>
+        {idle.map((I, i) => (
+          <button key={i} className="act" disabled title="Open a folder first" aria-label="Open a folder first"><I /></button>
+        ))}
+        <span className="act-gap" />
+      </nav>
 
-        {recent.length > 0 && (
-          <section>
-            <h2>Recent</h2>
-            <ul className="plain recent">
-              {recent.map((r) => (
-                <li key={r.path}>
-                  <button className="recent-row" disabled={!!busy} onClick={() => open(r.path)}>
-                    <strong>{r.name}</strong>
-                    <span className="muted small">{r.path}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        <section>
-          <h2>Open a folder</h2>
-          <form className="path-bar" onSubmit={(e) => { e.preventDefault(); browse(pathInput); }}>
-            <input value={pathInput} onChange={(e) => setPathInput(e.target.value)} aria-label="Folder path" spellCheck={false} />
-            <button className="btn" disabled={!!busy}>Go</button>
-          </form>
-          {list?.drives && list.drives.length > 0 && (
-            <div className="drives">
-              {list.drives.map((d) => <button key={d} className="key-btn" onClick={() => browse(d)}>{d}</button>)}
-            </div>
+      <aside className="side" aria-label="Side bar">
+        <h2 className="pane-title">Explorer</h2>
+        <div className="side-empty">
+          {opening ? (
+            <>
+              <p>Opening <strong>{job.name}</strong></p>
+              <ProgressBar job={job} />
+              <p className="muted small">{progressText(job)}</p>
+            </>
+          ) : (
+            <>
+              <p className="muted small">No folder is open.</p>
+              <button className="btn primary wide" onClick={() => setBrowse(true)}>Open Folder</button>
+            </>
           )}
-          <div className="browser" role="listbox" aria-label="Folders">
-            {list?.parent && (
-              <button className="dir-row" onClick={() => browse(list.parent)}>
-                <span className="dir-icon" aria-hidden="true">↰</span> ..
-              </button>
-            )}
-            {list?.dirs.map((d) => (
-              <div key={d.path} className={`dir-row-wrap ${d.isRepo ? "is-repo" : ""}`}>
-                <button className="dir-row" onClick={() => browse(d.path)} title={d.path}>
-                  <span className="dir-icon" aria-hidden="true">{d.isRepo ? "◆" : "▸"}</span> {d.name}
-                </button>
-                {d.isRepo && <button className="btn small-btn" disabled={!!busy} onClick={() => open(d.path)}>Open</button>}
-              </div>
-            ))}
-            {list && list.dirs.length === 0 && <p className="muted small pad-x">No sub-folders here.</p>}
-          </div>
-          {list && (
-            <div className="open-here">
-              <button className="btn primary" disabled={!!busy} onClick={() => open(list.path)}>
-                Open {list.path.split(/[\\/]/).filter(Boolean).pop() ?? list.path}
-              </button>
-              <span className="muted small">{list.isRepo ? "This folder is a repository." : "◆ marks repositories."}</span>
-            </div>
-          )}
-        </section>
-      </div>
-      {busy && (
-        <div className="launcher-busy" role="status">
-          <p className="wordmark-big">kuli<span>dev</span></p>
-          <p>Reading <strong>{busy}</strong>…</p>
-          <p className="muted small">The first time takes a few seconds for big repositories; after that it's instant.</p>
         </div>
-      )}
-    </main>
+        {ws.recent.length > 0 && (
+          <>
+            <h2 className="pane-title">Recent</h2>
+            <div className="side-recent"><RecentList recent={ws.recent} onOpen={pick} disabled={opening} /></div>
+          </>
+        )}
+      </aside>
+
+      <section className="editor-area" aria-label="Editor">
+        <div className="tabs" role="tablist">
+          <div className="tab on" role="tab" aria-selected="true"><span className="tab-name">Welcome</span></div>
+        </div>
+        {opening && <ProgressBar job={job} className="edge" />}
+        <div className="editor-body">
+          <div className="start-page">
+            <p className="wordmark-big">kuli<span>dev</span></p>
+            <p className="start-lede">Map a codebase, read it with evidence, and change it.</p>
+            {(failed || ws.error) && <p className="notice warn" role="alert">{failed || ws.error}</p>}
+            {opening ? (
+              <OpeningCard job={job} />
+            ) : (
+              <div className="start-cols">
+                <section>
+                  <h2>Start</h2>
+                  <ul className="plain start-actions">
+                    <li>
+                      <button className="btn-link" onClick={() => setBrowse(true)}>Open Folder…</button>
+                      <span className="keys-inline"><kbd>Ctrl</kbd> <kbd>O</kbd></span>
+                    </li>
+                  </ul>
+                </section>
+                <section>
+                  <h2>Recent</h2>
+                  {ws.recent.length > 0 ? (
+                    <RecentList recent={ws.recent.slice(0, 6)} onOpen={pick} />
+                  ) : (
+                    <p className="muted small">Folders you open show up here.</p>
+                  )}
+                </section>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
+
+      <footer className="status" aria-label="Status">
+        <span className="st-repo">{opening ? job.name : "No folder open"}</span>
+        {opening && <span>{progressText(job)}</span>}
+        <span className="st-gap" />
+        <span className="st-wide">KuliDev</span>
+      </footer>
+      {browse && <FolderDialog onPick={pick} onClose={() => setBrowse(false)} />}
+    </div>
   );
 }
