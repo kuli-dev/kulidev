@@ -2,6 +2,7 @@ package auth
 
 import (
 	"os"
+	"runtime"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -37,7 +38,7 @@ func TestPairCheckRevoke(t *testing.T) {
 	if strings.Contains(string(b), tok) {
 		t.Error("plain token stored on disk")
 	}
-	if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
+	if info, _ := os.Stat(path); runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 { // Windows: profile ACLs, no Unix modes
 		t.Errorf("devices file mode = %v", info.Mode().Perm())
 	}
 	s2, _ := Open(path)
@@ -90,7 +91,7 @@ func TestQRAndCert(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if info, _ := os.Stat(k); info.Mode().Perm() != 0o600 {
+	if info, _ := os.Stat(k); runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Errorf("key mode = %v", info.Mode().Perm())
 	}
 	c2, _, _ := SelfSignedCert(dir, nil) // reused, not regenerated

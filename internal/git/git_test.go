@@ -22,6 +22,7 @@ func sh(t *testing.T, dir string, args ...string) {
 func repo(t *testing.T) (Repo, string) {
 	dir := t.TempDir()
 	sh(t, dir, "init", "-q", "-b", "main")
+	sh(t, dir, "config", "core.autocrlf", "false") // Windows runners default to CRLF checkouts
 	sh(t, dir, "config", "user.email", "t@t")
 	sh(t, dir, "config", "user.name", "t")
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644)
@@ -133,7 +134,8 @@ func TestDiscardIsCareful(t *testing.T) {
 
 func TestPathsAndNonRepo(t *testing.T) {
 	r, _ := repo(t)
-	for _, bad := range []string{"../x", "/etc/passwd", "-rf", "--amend", ".git/config", ".git", "", "a/../../x"} {
+	for _, bad := range []string{"../x", "/etc/passwd", "-rf", "--amend", ".git/config", ".git", "", "a/../../x",
+		`C:\Windows\win.ini`, "C:/Windows/win.ini", `\\server\share\x`, `a\..\..\x`} {
 		if _, err := r.CleanPath(bad); err == nil {
 			t.Errorf("CleanPath(%q) accepted", bad)
 		}

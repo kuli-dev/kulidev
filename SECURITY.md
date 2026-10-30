@@ -18,5 +18,7 @@ GitHub's **Report a vulnerability** (Security tab) rather than in public issues.
   `--allow-remote-terminal` is given.
 - `kuli docs` / `kuli ask` redact credentials (key=value pairs and URL-embedded passwords)
   before anything is sent to a model; the endpoint is yours to choose.
+- Secret files (`devices.json`, the TLS key) are mode 0600 on Linux and macOS; on Windows
+  they rely on the user profile's access controls.
 - `.kulidev/.gitignore` keeps the database, paired devices, TLS keys and agent configs out of
   version control.

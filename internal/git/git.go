@@ -73,7 +73,10 @@ func (r Repo) run(ctx context.Context, stdin []byte, args ...string) ([]byte, er
 // CleanPath validates a repo-relative path from a client: relative, inside the tree,
 // never an option, never inside .git.
 func (r Repo) CleanPath(p string) (string, error) {
-	if p == "" || strings.ContainsRune(p, 0) || filepath.IsAbs(p) || strings.HasPrefix(p, "-") {
+	// Checked by hand, not just filepath.IsAbs: on Windows "/etc/passwd" is not "absolute"
+	// (no drive letter), and backslashes, drive letters and UNC paths must never pass anywhere.
+	if p == "" || strings.ContainsRune(p, 0) || filepath.IsAbs(p) || strings.HasPrefix(p, "-") ||
+		strings.HasPrefix(p, "/") || strings.Contains(p, "\\") || (len(p) >= 2 && p[1] == ':') {
 		return "", fmt.Errorf("bad path %q", p)
 	}
 	c := path.Clean(filepath.ToSlash(p))
