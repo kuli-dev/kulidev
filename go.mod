@@ -3,6 +3,7 @@ module github.com/kuli-dev/kulidev
 go 1.27.3
 
 require (
+	github.com/UserExistsError/conpty v0.1.4
 	github.com/coder/websocket v1.8.15
 	github.com/creack/pty v1.1.24
 	github.com/modelcontextprotocol/go-sdk v1.8.0
@@ -15,12 +16,12 @@ require (
 	github.com/tree-sitter/tree-sitter-python v0.25.0
 	github.com/tree-sitter/tree-sitter-typescript v0.23.2
 	github.com/webview/webview_go v0.0.0-20240831120633-6173450d4dd6
+	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.61.0
 	rsc.io/qr v0.2.0
 )
 
 require (
-	github.com/UserExistsError/conpty v0.1.4 // indirect
 	github.com/dustin/go-humanize v1.1.0 // indirect
 	github.com/google/jsonschema-go v0.4.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect

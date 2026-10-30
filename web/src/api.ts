@@ -52,11 +52,16 @@ export type GitStatus = { git: boolean; branch: string; upstream?: string; ahead
 
 export type SysProject = {
   path: string; name: string; git: boolean; markers: string[]; packages: string[];
-  files: number; lines: number; langs: { lang: string; lines: number }[];
+  files: number; lines: number; langs: { lang: string; lines: number }[]; roles?: string[];
 };
+export type SysService = {
+  name: string; kind: "api" | "worker" | "cronjob" | "job" | "frontend" | "database" | "cache" | "queue" | "storage" | "proxy";
+  project: string; deployed?: string; image?: string; ports: number[]; command?: string; envs: string[]; via: string[]; sources: SysEvidence[];
+};
+export type SysServiceLink = { from: string; to: string; kind: "depends on" | "calls"; evidence: SysEvidence[] };
 export type SysEvidence = { path: string; line: number; text: string; target?: string };
 export type SysLink = { from: string; to: string; kind: "imports" | "calls API" | "depends on" | "configures"; count: number; evidence: SysEvidence[] };
-export type SystemsMap = { projects: SysProject[]; links: SysLink[] };
+export type SystemsMap = { projects: SysProject[]; links: SysLink[]; services?: SysService[]; serviceLinks?: SysServiceLink[] };
 
 export type LLMSettings = { baseURL: string; model: string; reasoningEffort: string; maxTokens: number; hasKey?: boolean };
 export type SettingsInfo = {

@@ -22,6 +22,7 @@ func TestSystemOverview(t *testing.T) {
 		"shop-api/shop_core/models.py":   "class Order:\n    pass\n",
 		"worker/pyproject.toml":          "[project]\nname = \"worker\"\ndependencies = [\"shop-core\"]\n",
 		"worker/run.py":                  "from shop_core import models\n",
+		"shop-api/docker-compose.yml":    "services:\n  api:\n    build: .\n    ports: [\"8000:8000\"]\n    environment:\n      - DB=postgres://u:p@db:5432/x\n  db:\n    image: postgres:16\n",
 	} {
 		os.MkdirAll(filepath.Join(root, filepath.Dir(p)), 0o755)
 		os.WriteFile(filepath.Join(root, p), []byte(body), 0o644)
@@ -40,7 +41,9 @@ func TestSystemOverview(t *testing.T) {
 	b, _ := os.ReadFile(filepath.Join(out, res.File))
 	doc := string(b)
 	for _, want := range []string{"## Projects", "**shop-api**", "### worker → shop-api", "worker imports code from shop-api",
-		"](../../worker/run.py#L1)", "worker declares a dependency on shop-api", "**shop-api** is used by 1"} {
+		"](../../worker/run.py#L1)", "worker declares a dependency on shop-api", "**shop-api** is used by 1",
+		"## Services", "| **api** | API | shop-api | compose | 8000 | [shop-api/docker-compose.yml:2]", "- **db**: database, `postgres:16`",
+		"- **api** calls **db**"} {
 		if !strings.Contains(doc, want) {
 			t.Errorf("missing %q in:\n%s", want, doc)
 		}

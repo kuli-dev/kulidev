@@ -164,6 +164,8 @@ export function Workbench() {
   // Several projects in the folder (repositories, or apps of a monorepo): the Systems view.
   const sys = useLoad(api.systems, [ov.data?.root, ov.data?.scannedAt]);
   const projects = sys.data && sys.data.projects.length >= 2 ? sys.data : null;
+  const serviceCount = sys.data?.services?.length ?? 0;
+  const systems = projects || serviceCount >= 2 ? sys.data : null; // something to draw
   function pickFolder(path: string) {
     setBrowse(false);
     setSwitcher(false);
@@ -333,7 +335,7 @@ export function Workbench() {
       { id: "v-agents", menu: "View" as const, label: "Agents", run: show("agents") },
     ] : []),
     { id: "v-devices", menu: "View", label: "Devices", run: show("devices") },
-    { id: "v-systems", menu: "View", label: "Systems Diagram", run: () => openTab({ kind: "systems" }), disabled: !projects, sep: true },
+    { id: "v-systems", menu: "View", label: "Systems Diagram", run: () => openTab({ kind: "systems" }), disabled: !systems, sep: true },
     { id: "v-map", menu: "View", label: "Component Map", run: () => openTab({ kind: "map" }) },
     { id: "t-side", menu: "View", label: "Toggle Side Bar", keys: "Ctrl+B", run: () => setView((v) => (v ? null : "explorer")), sep: true },
     { id: "t-chat", menu: "View", label: "Toggle Ask Kuli", keys: "Ctrl+L", run: () => setChat((c) => !c) },
@@ -367,8 +369,8 @@ export function Workbench() {
           </button>
         ))}
         <button className="act" title="Map" aria-label="Open map" onClick={() => openTab({ kind: "map" })}><Icon.map /></button>
-        {projects && (
-          <button className="act" title={`Systems: ${projects.projects.length} projects and how they connect`} aria-label="Open systems diagram"
+        {systems && (
+          <button className="act" title={projects ? `Systems: ${projects.projects.length} projects, ${serviceCount} services, and how they connect` : `Systems: ${serviceCount} services`} aria-label="Open systems diagram"
             onClick={() => openTab({ kind: "systems" })}><Icon.systems /></button>
         )}
         <span className="act-gap" />
@@ -453,7 +455,7 @@ export function Workbench() {
               {canSwitch && <button className="btn switch-folder" onClick={() => setBrowse(true)}>Open Folder…</button>}
               {projects && (
                 <section className="projects-strip">
-                  <h2>{projects.projects.length} projects in this folder</h2>
+                  <h2>{projects.projects.length} projects{serviceCount ? `, ${serviceCount} services` : ""} in this folder</h2>
                   <p className="muted small">
                     {projects.links.length > 0
                       ? `${new Set(projects.links.map((l) => `${l.from}>${l.to}`)).size} connections found between them, each with the code that proves it.`

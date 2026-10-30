@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+- **Microservices**: KuliDev finds what actually gets deployed and run — docker-compose
+  services, Kubernetes workloads (Deployments, StatefulSets, CronJobs, Jobs; one service
+  across dev/staging/prod overlays) and Dockerfile images — even several from one
+  repository. Each is labelled (API, worker, cron job, job, front end, or a backing
+  database/cache/queue/storage/proxy from a stock image), tied to the project whose code
+  it runs and the one that deploys it, with its environments, image, ports and command.
+- **Services view** in Systems (Projects | Services): services in a box per project,
+  backing services apart, arrows for depends on (compose) and calls (a URL in a
+  service's config naming another, Kubernetes Service names included); click for where
+  it is defined. Shown for a single repository with several services too.
+- **Project roles**: service, front end, library or infrastructure.
+- The **System overview** gets a Services section (table, backing services, how they
+  use each other), every row citing its definition.
+
 ## 0.3.1 (2026-10-31)
 
 Windows terminal and agents, docs from the app (per project too), Cursor CLI.

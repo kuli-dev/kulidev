@@ -28,6 +28,7 @@ type Project struct {
 	Files    int         `json:"files"`
 	Lines    int         `json:"lines"`
 	Langs    []LangShare `json:"langs"`
+	Roles    []string    `json:"roles"` // service, frontend, library, infrastructure
 }
 
 type LangShare struct {
@@ -62,8 +63,10 @@ type Link struct {
 
 // Map is the folder's projects and their links.
 type Map struct {
-	Projects []Project `json:"projects"`
-	Links    []Link    `json:"links"`
+	Projects     []Project     `json:"projects"`
+	Links        []Link        `json:"links"`
+	Services     []Service     `json:"services"`     // what gets deployed and run
+	ServiceLinks []ServiceLink `json:"serviceLinks"` // services using each other
 }
 
 const maxEvidence = 12
@@ -88,22 +91,27 @@ func Build(root string, snap *store.Snapshot) Map {
 		files[f.Path] = true
 	}
 	projects := detect(root, snap, files)
-	if len(projects) < 2 {
-		return Map{Projects: projects, Links: []Link{}}
-	}
-	b := &builder{root: root, projects: projects, byDir: map[string]int{}, links: map[[3]string]*Link{}}
+	b := &builder{root: root, projects: projects, byDir: map[string]int{}, links: map[[3]string]*Link{}, served: map[int]bool{}}
 	for i, p := range projects {
 		b.byDir[p.Path] = i
 	}
-	b.describe(snap, files)
-	b.imports(snap)
-	b.dependencies(snap)
-	b.config(snap)
-	b.http(snap)
+	if len(projects) >= 2 {
+		b.describe(snap, files)
+		b.imports(snap)
+		b.dependencies(snap)
+		b.config(snap)
+		b.http(snap)
+	}
+	// Services exist in a single repository too (an API and its workers).
+	services, serviceLinks := b.services(snap)
 
-	out := Map{Projects: b.projects, Links: []Link{}}
+	out := Map{Projects: b.projects, Links: []Link{}, Services: services, ServiceLinks: serviceLinks}
 	for _, l := range b.links {
 		out.Links = append(out.Links, *l)
+	}
+	if len(projects) >= 2 {
+		b.roles(services)
+		out.Projects = b.projects
 	}
 	sort.Slice(out.Links, func(i, j int) bool {
 		a, c := out.Links[i], out.Links[j]
@@ -206,11 +214,13 @@ func under(p string, dirs map[string]bool) bool {
 }
 
 type builder struct {
-	root     string
-	projects []Project
-	byDir    map[string]int
-	links    map[[3]string]*Link
-	lines    map[string][]string // file cache for evidence text
+	root        string
+	projects    []Project
+	byDir       map[string]int
+	links       map[[3]string]*Link
+	served      map[int]bool        // projects whose code defines HTTP routes
+	configLines []int               // lines of deployment files (YAML, Terraform, …) per project
+	lines       map[string][]string // file cache for evidence text
 }
 
 // of returns the index of the project a path belongs to (-1: none).
@@ -283,10 +293,25 @@ func (b *builder) describe(snap *store.Snapshot, files map[string]bool) {
 	for i := range langs {
 		langs[i] = map[string]int{}
 	}
+	// Deployment files (Kubernetes, Terraform, Helm) weigh against code to tell an
+	// infrastructure repository; compose files don't, every app repository has one.
+	b.configLines = make([]int, len(b.projects))
+	deployFiles := map[string]bool{}
+	for kind, paths := range snap.Manifests {
+		switch kind {
+		case "Kubernetes manifest", "Terraform", "Chart.yaml", "kustomization.yaml":
+			for _, p := range paths {
+				deployFiles[p] = true
+			}
+		}
+	}
 	for _, f := range snap.Files {
 		i := b.of(f.Path)
 		if i < 0 {
 			continue
+		}
+		if deployFiles[f.Path] || strings.HasSuffix(f.Path, ".tpl") || strings.HasSuffix(f.Path, ".hcl") {
+			b.configLines[i] += f.Lines
 		}
 		b.projects[i].Files++
 		b.projects[i].Lines += f.Lines

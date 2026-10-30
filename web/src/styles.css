@@ -748,3 +748,28 @@ figure.mmd { margin: 1.2rem 0; padding: 12px; border: 1px solid var(--line); bor
 .docs-scope { display: grid; gap: 4px; margin: 0 0 10px; }
 .docs-scope select { font: inherit; font-size: 13px; padding: 5px 7px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; }
 .tb-version { font-family: var(--mono); font-size: 11px; color: var(--muted); padding: 0 6px; white-space: nowrap; }
+
+/* Services view */
+.svc-canvas { position: relative; }
+.svc-legend { position: absolute; top: 8px; left: 12px; right: 12px; z-index: 5; display: flex; flex-wrap: wrap; gap: 6px 16px; color: var(--steel); pointer-events: none; }
+.svc-legend label { pointer-events: auto; }
+.react-flow__node-svc, .react-flow__node-box { padding: 0; border: 0; background: none; }
+.svc-box { border: 1.5px dashed var(--line); border-radius: 8px; background: color-mix(in srgb, var(--surface) 40%, transparent); }
+.svc-box > span { display: block; padding: 6px 10px; font-size: 12px; font-weight: 600; color: var(--steel); }
+.svc-node { width: 200px; min-height: 54px; display: grid; gap: 1px; padding: 6px 10px; background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--steel); border-radius: 4px; color: var(--ink); font-size: 12px; cursor: pointer; }
+.svc-node strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.svc-kind, .svc-envs { font-size: 11px; color: var(--steel); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.svc-api, .svc-frontend { border-left-color: var(--brand); }
+.svc-worker { border-left-color: var(--info); }
+.svc-cronjob, .svc-job { border-left-color: var(--warning); }
+.svc-database, .svc-cache, .svc-queue, .svc-storage, .svc-proxy { border-left-color: var(--success); border-radius: 12px; }
+.svc-node.is-sel { border-color: var(--brand); box-shadow: 0 0 0 2px var(--brand-wash); }
+.svc-node.is-dim { opacity: 0.3; }
+.svc-edge .react-flow__edge-path { stroke: var(--steel); stroke-width: 1.4; }
+.svc-edge.is-call .react-flow__edge-path { stroke-dasharray: 5 4; }
+.svc-edge.edge-hot .react-flow__edge-path { stroke: var(--brand); stroke-width: 2; }
+.svc-edge.edge-dim .react-flow__edge-path { opacity: 0.15; }
+.svc-h { opacity: 0; width: 6px !important; height: 6px !important; min-width: 0; min-height: 0; border: 0 !important; pointer-events: none; }
+.svc-node { position: relative; }
+.panel .set-facts li { grid-template-columns: 96px minmax(0, 1fr); }
+.panel .set-facts code { word-break: break-word; }

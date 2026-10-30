@@ -5,6 +5,7 @@ import { api, type SysLink, type SysProject, type SystemsMap } from "../api";
 import { fmt, useLoad } from "../hooks";
 import { href } from "../router";
 import { ErrorNote } from "./Overview";
+import { ServicesView } from "./Services";
 
 const W = 230;
 const H = 74;
@@ -86,7 +87,9 @@ function layout(m: SystemsMap, ps: Pair[], sel: Sel): { nodes: Node[]; edges: Ed
 function ProjectLabel({ p }: { p: SysProject }) {
   return (
     <div className="node-label">
-      <span className="node-parent">{p.path === "" ? "this folder" : p.git ? "repository" : p.markers[0] ?? "project"}</span>
+      <span className="node-parent">
+        {p.path === "" ? "this folder" : p.roles?.length ? p.roles.join(" + ") : p.git ? "repository" : p.markers[0] ?? "project"}
+      </span>
       <strong>{p.name}</strong>
       <span className="node-meta">
         {fmt(p.files)} files{p.langs.length > 0 && `, ${p.langs.slice(0, 2).map((l) => l.lang).join(", ")}`}
@@ -100,6 +103,10 @@ type Sel = { type: "project"; path: string } | { type: "pair"; from: string; to:
 export function SystemsView() {
   const m = useLoad(api.systems, []);
   const [sel, setSel] = useState<Sel>(null);
+  const multi = (m.data?.projects.length ?? 0) >= 2;
+  const hasServices = (m.data?.services?.length ?? 0) > 0;
+  const [tab, setTab] = useState<"projects" | "services">("projects");
+  const showing = !multi && hasServices ? "services" : tab;
   const ps = useMemo(() => (m.data ? pairs(m.data) : []), [m.data]);
   const flow = useMemo(() => (m.data ? layout(m.data, ps, sel) : null), [m.data, ps, sel]);
   const name = (path: string) => m.data?.projects.find((p) => p.path === path)?.name ?? path;
@@ -108,16 +115,24 @@ export function SystemsView() {
     <div className="map-page">
       <div className="map-head">
         <h1 className="title">Systems</h1>
+        {multi && hasServices && (
+          <div className="seg" role="tablist" aria-label="Show">
+            <button role="tab" aria-selected={showing === "projects"} className={showing === "projects" ? "on" : ""} onClick={() => setTab("projects")}>Projects</button>
+            <button role="tab" aria-selected={showing === "services"} className={showing === "services" ? "on" : ""} onClick={() => setTab("services")}>Services ({m.data!.services!.length})</button>
+          </div>
+        )}
         <p className="muted small">
-          The projects in this folder and how they connect. Solid arrows: code imports, HTTP calls to another project's routes, or declared dependencies. Dashed:
-          deploy and config files that refer to another project. Click anything to see the evidence.
+          {showing === "services"
+            ? "What gets deployed and run (docker-compose, Kubernetes, Dockerfiles), grouped by the project whose code it runs. Arrows: depends on (solid) and calls through a URL in its configuration (dashed). Click a service for where it is defined."
+            : "The projects in this folder and how they connect. Solid arrows: code imports, HTTP calls to another project's routes, or declared dependencies. Dashed: deploy and config files that refer to another project. Click anything to see the evidence."}
         </p>
       </div>
       {m.error && <ErrorNote msg={m.error} />}
-      {m.data && m.data.projects.length < 2 && (
-        <p className="pad muted">This folder holds a single project. Open a folder that contains several repositories to see how they relate.</p>
+      {m.data && showing === "services" && <ServicesView m={m.data} />}
+      {m.data && !multi && !hasServices && (
+        <p className="pad muted">This folder holds a single project and no services. Open a folder that contains several repositories to see how they relate.</p>
       )}
-      {m.data && m.data.projects.length >= 2 && (
+      {m.data && multi && showing === "projects" && (
         <div className="map-body">
           <div className="map-canvas">
             {flow && (

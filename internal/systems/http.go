@@ -184,6 +184,7 @@ func (b *builder) http(snap *store.Snapshot) {
 					segs := append(append([]string{}, prefix...), splitPath(m[len(m)-1])...)
 					if len(segs) > 0 {
 						routes = append(routes, route{segs, proj, Evidence{Path: f.Path, Line: n, Text: strings.TrimSpace(line)}})
+						b.served[proj] = true
 					}
 					defined = true
 					break

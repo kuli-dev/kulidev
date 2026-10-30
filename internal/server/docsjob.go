@@ -99,7 +99,7 @@ func (s *Server) docsGenerate(w http.ResponseWriter, r *http.Request) {
 	full := s.snap
 	s.mu.RUnlock()
 	projects := s.buildSystems(full)
-	system := len(projects.Projects) >= 2 && (req.Scope == "" || req.Scope == "*")
+	system := (len(projects.Projects) >= 2 || len(projects.Services) >= 2) && (req.Scope == "" || req.Scope == "*")
 	if req.Scope == "*" {
 		steps = append(steps, step{"", ""})
 		for _, p := range projects.Projects {

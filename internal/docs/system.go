@@ -29,7 +29,7 @@ var kindText = map[string]string{
 // that shows it) and where to start. It needs no model. The document is added to the
 // manifest in outDir, so it shows in the Docs list and goes stale with its evidence.
 func SystemOverview(m *systems.Map, root, outDir, version string) (*DocResult, error) {
-	if m == nil || len(m.Projects) < 2 {
+	if m == nil || len(m.Projects) < 2 && len(m.Services) < 2 {
 		return nil, nil
 	}
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
@@ -126,6 +126,8 @@ func SystemOverview(m *systems.Map, root, outDir, version string) (*DocResult, e
 		}
 		fmt.Fprintf(&b, "| **%s** (%s) | %s | %d files | %s |\n", name[p.Path], where, strings.Join(what, "; "), p.Files, strings.Join(langs, ", "))
 	}
+
+	writeServices(&b, m, name, cite)
 
 	b.WriteString("\n## How they connect\n\n")
 	if len(order) == 0 {
@@ -238,4 +240,95 @@ func SystemOverview(m *systems.Map, root, outDir, version string) (*DocResult, e
 		return nil, err
 	}
 	return res, nil
+}
+
+var serviceKind = map[string]string{
+	systems.KindAPI: "API", systems.KindWorker: "worker", systems.KindCron: "cron job", systems.KindJob: "job",
+	systems.KindFrontend: "front end", systems.KindDatabase: "database", systems.KindCache: "cache",
+	systems.KindQueue: "queue", systems.KindStorage: "storage", systems.KindProxy: "proxy",
+}
+
+func backingService(kind string) bool {
+	switch kind {
+	case systems.KindDatabase, systems.KindCache, systems.KindQueue, systems.KindStorage, systems.KindProxy:
+		return true
+	}
+	return false
+}
+
+// writeServices lists what gets deployed and run, and how the services use each other.
+func writeServices(b *strings.Builder, m *systems.Map, name map[string]string, cite func(systems.Evidence) string) {
+	if len(m.Services) == 0 {
+		return
+	}
+	var apps, stock []systems.Service
+	for _, s := range m.Services {
+		if backingService(s.Kind) {
+			stock = append(stock, s)
+		} else {
+			apps = append(apps, s)
+		}
+	}
+	sort.SliceStable(apps, func(i, j int) bool {
+		if apps[i].Project != apps[j].Project {
+			return apps[i].Project < apps[j].Project
+		}
+		return apps[i].Name < apps[j].Name
+	})
+	fmt.Fprintf(b, "\n## Services\n\nWhat gets deployed and run: %d services of the system's own code and %d backing services, found in docker-compose files, Kubernetes manifests and Dockerfiles.\n\n", len(apps), len(stock))
+	if len(apps) > 0 {
+		b.WriteString("| Service | What | Code | Runs in | Ports | Defined at |\n|---|---|---|---|---|---|\n")
+		for _, s := range apps {
+			code := name[s.Project]
+			if s.Project == "" {
+				code = "—"
+			}
+			if s.Deployed != "" {
+				code += ", deployed from " + name[s.Deployed]
+			}
+			envs := strings.Join(s.Envs, ", ")
+			if envs == "" {
+				envs = strings.Join(s.Via, ", ")
+			}
+			var ports []string
+			for _, p := range s.Ports {
+				ports = append(ports, fmt.Sprint(p))
+			}
+			def := ""
+			if len(s.Sources) > 0 {
+				def = cite(s.Sources[0])
+				if len(s.Sources) > 1 {
+					def += fmt.Sprintf(" (+%d)", len(s.Sources)-1)
+				}
+			}
+			fmt.Fprintf(b, "| **%s** | %s | %s | %s | %s | %s |\n", s.Name, serviceKind[s.Kind], code, envs, strings.Join(ports, ", "), def)
+		}
+	}
+	if len(stock) > 0 {
+		b.WriteString("\nBacking services (stock images):\n\n")
+		for _, s := range stock {
+			line := fmt.Sprintf("- **%s**: %s", s.Name, serviceKind[s.Kind])
+			if s.Image != "" {
+				line += ", `" + s.Image + "`"
+			}
+			if len(s.Sources) > 0 {
+				line += ", " + cite(s.Sources[0])
+			}
+			b.WriteString(line + "\n")
+		}
+	}
+	if len(m.ServiceLinks) > 0 {
+		b.WriteString("\nHow the services use each other:\n\n")
+		for _, l := range m.ServiceLinks {
+			line := fmt.Sprintf("- **%s** %s **%s**", l.From, l.Kind, l.To)
+			if len(l.Evidence) > 0 {
+				e := l.Evidence[0]
+				line += ": " + cite(e)
+				if e.Text != "" && l.Kind == "calls" {
+					line += " `" + strings.ReplaceAll(e.Text, "`", "'") + "`"
+				}
+			}
+			b.WriteString(line + "\n")
+		}
+	}
 }
