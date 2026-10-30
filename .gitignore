@@ -1,0 +1,5 @@
+bin/
+dist/
+.kulidev/
+*.db
+*.db-*
