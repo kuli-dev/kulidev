@@ -91,7 +91,7 @@ export function SettingsView({ onOpenFolder, onRescan, onSaved, root }: {
               </select>
             </label>
             <label>Max tokens per reply
-              <input type="number" min={0} max={200000} step={256} {...field("maxTokens")} placeholder="2048" />
+              <input type="number" min={0} max={200000} step={1} {...field("maxTokens")} placeholder="2048" />
             </label>
             <div className="set-actions">
               <button type="button" className="btn" disabled={!!busy || !form.baseURL} onClick={test}>{busy === "test" ? "Testing…" : "Test connection"}</button>
