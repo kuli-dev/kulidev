@@ -9,7 +9,9 @@ const css = (v: string) => getComputedStyle(document.documentElement).getPropert
 
 // The bottom panel: persistent shells. Closing the panel or the browser leaves them
 // running on the server; reopening replays their recent output.
-export function TerminalPanel({ height, onResize, onClose }: { height: number; onResize: (h: number) => void; onClose: () => void }) {
+export function TerminalPanel({ height, focus, onResize, onClose }: {
+  height: number; focus?: string; onResize: (h: number) => void; onClose: () => void;
+}) {
   const [list, setList] = useState<TermInfo[]>([]);
   const [active, setActive] = useState<string>("");
   const [error, setError] = useState("");
@@ -42,11 +44,15 @@ export function TerminalPanel({ height, onResize, onClose }: { height: number; o
   }
 
   useEffect(() => {
+    if (focus) {
+      refresh(focus);
+      return;
+    }
     refresh().then((ts) => {
       if (ts.length === 0) create();
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [focus]);
 
   function drag(e: React.PointerEvent) {
     const startY = e.clientY;

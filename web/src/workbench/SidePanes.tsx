@@ -209,3 +209,49 @@ export function IssuesPane({ onOpen }: { onOpen: (p: string, from?: number) => v
   );
 }
 
+
+export function AgentsPane({ onStart }: { onStart: (id: string) => Promise<void> }) {
+  const a = useLoad(api.agents, []);
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const list = a.data?.agents ?? [];
+  async function start(id: string) {
+    setBusy(id);
+    setError("");
+    try {
+      await onStart(id);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy("");
+    }
+  }
+  return (
+    <div className="pane">
+      <h2 className="pane-title">Agents</h2>
+      <p className="muted small pad-x">
+        Runs a coding agent in this workspace's terminal. Agents marked "knows this repo" start with KuliDev's
+        knowledge graph attached, so they can search code and check who depends on what before changing it.
+      </p>
+      {a.data && !a.data.enabled && <p className="notice pad">Agents need terminals, which are off for this workspace.</p>}
+      {error && <p className="notice warn pad">{error}</p>}
+      <ul className="plain agents">
+        {list.map((ag) => (
+          <li key={ag.id}>
+            <div className="agent-row">
+              <span className="agent-name">{ag.name}</span>
+              {ag.installed ? (
+                <button className="btn" disabled={!a.data?.enabled || busy !== ""} onClick={() => start(ag.id)}>
+                  {busy === ag.id ? "Starting…" : "Start"}
+                </button>
+              ) : (
+                <span className="muted small">not installed</span>
+              )}
+            </div>
+            <span className="small muted">{ag.mcp ? "Knows this repo (KuliDev MCP attached)" : ag.hint}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}

@@ -35,6 +35,8 @@ export type TreeFile = { p: string; l?: string; n: number };
 
 export type TermInfo = { id: string; title: string; started: string; exited: boolean; exitCode: number };
 
+export type AgentInfo = { id: string; name: string; installed: boolean; mcp: boolean; hint?: string };
+
 export type AskResult = { answer: string; keywords: string[]; citations: number; removed: number; coverage: number; hits: number };
 
 export class ApiError extends Error {
@@ -76,5 +78,8 @@ export const api = {
   startTerminal: (cols: number, rows: number) =>
     call<TermInfo>("api/terminals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cols, rows }) }),
   killTerminal: (id: string) => call<{ ok: boolean }>(`api/terminals/${q(id)}`, { method: "DELETE" }),
+  agents: () => call<{ enabled: boolean; agents: AgentInfo[] }>("api/agents"),
+  startAgent: (id: string, cols: number, rows: number) =>
+    call<TermInfo>("api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, cols, rows }) }),
   rescan: () => call<{ files: number; ms: number }>("api/rescan", { method: "POST" }),
 };

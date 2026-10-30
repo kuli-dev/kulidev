@@ -8,6 +8,7 @@ export const Icon = {
   docs: () => (<svg viewBox="0 0 24 24" width="24" height="24" {...P}><path d="M4 5.5A1.5 1.5 0 0 1 5.5 4H11v16H5.5A1.5 1.5 0 0 1 4 18.5zM20 5.5A1.5 1.5 0 0 0 18.5 4H13v16h5.5a1.5 1.5 0 0 0 1.5-1.5z" /></svg>),
   issues: () => (<svg viewBox="0 0 24 24" width="24" height="24" {...P}><path d="M12 3 2.5 20h19z" /><path d="M12 10v4M12 17.2v.3" /></svg>),
   chat: () => (<svg viewBox="0 0 24 24" width="24" height="24" {...P}><path d="M4 5h16v11H9l-5 4z" /><path d="M8 9.5h8M8 12.5h5" /></svg>),
+  agent: () => (<svg viewBox="0 0 24 24" width="24" height="24" {...P}><rect x="5" y="8" width="14" height="11" rx="2" /><path d="M12 4v4M9 13h.01M15 13h.01M9.5 16.5h5" /></svg>),
   home: () => (<svg viewBox="0 0 24 24" width="24" height="24" {...P}><path d="M4 11 12 4l8 7v9H4z" /><path d="M10 20v-5h4v5" /></svg>),
   close: () => (<svg viewBox="0 0 16 16" width="14" height="14" {...P}><path d="m4 4 8 8M12 4l-8 8" /></svg>),
   chevron: ({ open }: { open: boolean }) => (

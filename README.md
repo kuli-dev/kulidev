@@ -96,6 +96,9 @@ A VS Code-style workbench over the knowledge graph:
   graph refreshes in the background. `kuli serve --read-only` turns editing off.
 - **Integrated terminal** (**Ctrl+`**): real shells on the server that keep running when
   you close the panel or the browser; reopening replays their recent output.
+- **Agents**: start Claude Code or Codex in the workspace terminal with KuliDev's MCP
+  server already attached, so the agent can search the code and check who depends on what
+  before it changes anything. OpenCode and Aider are detected and launched too.
 - **Map** (component graph), **Docs** (with stale warnings), **Issues** (broken imports) and
   a **Welcome** overview as tabs or side views. **Ctrl+Shift+F** search, **Ctrl+B** side bar.
 

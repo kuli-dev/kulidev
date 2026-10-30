@@ -158,6 +158,12 @@ var ErrTooMany = errors.New("too many terminals open; close one first")
 
 // Start opens a new shell session.
 func (m *Manager) Start(cols, rows int) (*Session, error) {
+	return m.StartCommand("", m.shell, cols, rows)
+}
+
+// StartCommand runs argv on a PTY in the workspace (e.g. a coding agent's CLI).
+// An empty title gets "Terminal N".
+func (m *Manager) StartCommand(title string, argv []string, cols, rows int) (*Session, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	live := 0
@@ -172,7 +178,7 @@ func (m *Manager) Start(cols, rows int) (*Session, error) {
 	if cols < 2 || rows < 2 || cols > 1000 || rows > 1000 {
 		cols, rows = 100, 30
 	}
-	cmd := exec.Command(m.shell[0], m.shell[1:]...)
+	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = m.dir
 	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor", "KULIDEV=1")
 	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
@@ -180,8 +186,11 @@ func (m *Manager) Start(cols, rows int) (*Session, error) {
 		return nil, err
 	}
 	m.next++
+	if title == "" {
+		title = fmt.Sprintf("Terminal %d", m.next)
+	}
 	s := &Session{
-		ID: fmt.Sprintf("t%d", m.next), Title: fmt.Sprintf("Terminal %d", m.next), Started: time.Now(),
+		ID: fmt.Sprintf("t%d", m.next), Title: title, Started: time.Now(),
 		cmd: cmd, ptmx: ptmx, subs: map[chan []byte]struct{}{},
 	}
 	m.sess[s.ID] = s

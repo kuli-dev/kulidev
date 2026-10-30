@@ -12,9 +12,9 @@ import { clearFileCache, tabTitle, type NewTab, type Tab } from "./files";
 import { Icon } from "./Icons";
 import { QuickOpen } from "./QuickOpen";
 import { TerminalPanel } from "./Terminal";
-import { DocsPane, Explorer, IssuesPane, SearchPane } from "./SidePanes";
+import { AgentsPane, DocsPane, Explorer, IssuesPane, SearchPane } from "./SidePanes";
 
-type View = "explorer" | "search" | "docs" | "issues";
+type View = "explorer" | "search" | "docs" | "issues" | "agents";
 
 const WELCOME: Tab = { id: "welcome", kind: "welcome" };
 
@@ -42,6 +42,13 @@ export function Workbench() {
   const [cursor, setCursor] = useState<Cursor | null>(null);
   const [termOpen, setTermOpen] = useState(false);
   const [termH, setTermH] = useState(280);
+  const [termFocus, setTermFocus] = useState<string | undefined>();
+
+  async function startAgent(id: string) {
+    const t = await api.startAgent(id, 110, Math.max(10, Math.floor(termH / 18)));
+    setTermFocus(t.id);
+    setTermOpen(true);
+  }
   const [scan, setScan] = useState<"idle" | "busy" | string>("idle");
   const [dirty, setDirty] = useState<Set<string>>(() => new Set());
   const markDirty = useCallback((path: string, d: boolean) => {
@@ -162,6 +169,7 @@ export function Workbench() {
     { v: "search", label: "Search (Ctrl+Shift+F)", icon: Icon.search },
     { v: "docs", label: "Docs", icon: Icon.docs },
     { v: "issues", label: "Issues", icon: Icon.issues },
+    ...(ov.data?.terminals ? [{ v: "agents" as View, label: "Agents", icon: Icon.agent }] : []),
   ];
 
   return (
@@ -187,6 +195,7 @@ export function Workbench() {
           {view === "search" && <SearchPane initial={searchQ} onOpen={openFile} />}
           {view === "docs" && <DocsPane onOpenDoc={(name) => openTab({ kind: "doc", name })} />}
           {view === "issues" && <IssuesPane onOpen={openFile} />}
+          {view === "agents" && <AgentsPane onStart={startAgent} />}
         </aside>
       )}
 
@@ -219,7 +228,7 @@ export function Workbench() {
           {current?.kind === "doc" && <DocTab name={current.name} />}
           {current?.kind === "welcome" && <div className="welcome-tab"><OverviewView ov={ov} onRescan={rescan} /></div>}
         </div>
-        {termOpen && ov.data?.terminals && <TerminalPanel height={termH} onResize={setTermH} onClose={() => setTermOpen(false)} />}
+        {termOpen && ov.data?.terminals && <TerminalPanel height={termH} focus={termFocus} onResize={setTermH} onClose={() => setTermOpen(false)} />}
       </section>
 
       {chat && <Chat enabled={ov.data?.llm ?? false} model={ov.data?.model} onClose={() => setChat(false)} />}

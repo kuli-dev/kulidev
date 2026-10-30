@@ -26,7 +26,7 @@ the workspace, IDE and remote features are layered on top.
 ## v0.3 — Agents
 - [x] `kuli mcp` — MCP server: overview, search, dependencies, file outline, broken imports, rescan
 - [ ] MCP: get_architecture / get_related_files once the infra + route graph exists
-- [ ] Agent runtime: CLI adapters (Claude Code, Codex, OpenCode, Aider) on supervised PTYs
+- [x] Agent runtime: CLI adapters on supervised PTYs (see v0.5)
 
 ## v0.4 — Web UI (`kuli serve`)
 - [x] `kuli serve`: embedded React app — overview, component map (React Flow + dagre), search, file viewer with cited-line highlighting, docs with freshness, ask, broken imports
@@ -38,7 +38,7 @@ the workspace, IDE and remote features are layered on top.
 - [x] Outline / Imported by panels; Ask Kuli chat panel; Map, Docs, Welcome as tabs
 - [x] Edit + save files: content-hash conflict detection, atomic writes, background re-index, --read-only
 - [x] Integrated terminal: xterm.js + server PTY over WebSocket; sessions persist and replay scrollback on reconnect
-- [ ] Agent sessions (Claude Code, Codex, …) in the workbench, with kuli MCP attached
+- [x] Agent sessions in the workbench terminal: Claude Code (--mcp-config) and Codex (-c mcp_servers…) start with kuli MCP attached; OpenCode/Aider detected
 - [ ] Lazy-load Monaco so the first paint doesn't wait for 1 MB of editor
 
 ## Later

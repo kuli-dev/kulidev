@@ -23,6 +23,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kuli-dev/kulidev/internal/agents"
 	"github.com/kuli-dev/kulidev/internal/ask"
 	"github.com/kuli-dev/kulidev/internal/docs"
 	"github.com/kuli-dev/kulidev/internal/scan"
@@ -104,6 +105,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/terminals", s.termStart)
 	mux.HandleFunc("DELETE /api/terminals/{id}", s.termKill)
 	mux.HandleFunc("GET /api/terminals/{id}/ws", s.termSocket)
+	mux.HandleFunc("GET /api/agents", s.agentList)
+	mux.HandleFunc("POST /api/agents", s.agentStart)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { fail(w, http.StatusNotFound, "no such endpoint") })
 	if s.ui != nil {
 		files := http.FileServerFS(s.ui)
@@ -739,6 +742,46 @@ func (s *Server) termSocket(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	c.Close(websocket.StatusNormalClosure, "session ended")
+}
+
+func (s *Server) agentList(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, map[string]any{"enabled": s.terms != nil, "agents": agents.List()})
+}
+
+// agentStart launches a coding agent in a terminal session, attached to this
+// workspace's knowledge graph over MCP where the agent supports it.
+func (s *Server) agentStart(w http.ResponseWriter, r *http.Request) {
+	if !s.termsOr403(w) {
+		return
+	}
+	var req struct {
+		ID         string `json:"id"`
+		Cols, Rows int
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, "agent id required")
+		return
+	}
+	kuli, err := os.Executable()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	name, argv, err := agents.Command(req.ID, agents.Workspace{Root: s.root, DataDir: s.dataDir, Kuli: kuli})
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	sess, err := s.terms.StartCommand(name, argv, req.Cols, req.Rows)
+	if errors.Is(err, term.ErrTooMany) {
+		fail(w, http.StatusTooManyRequests, err.Error())
+		return
+	} else if err != nil {
+		fail(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	log.Printf("started agent %s in %s", name, s.root)
+	writeJSON(w, sess.Info())
 }
 
 func modelName(c docs.Chatter) string {
