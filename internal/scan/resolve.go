@@ -3,6 +3,7 @@ package scan
 import (
 	"bufio"
 	"bytes"
+	"encoding/json"
 	"path"
 	"sort"
 	"strings"
@@ -23,8 +24,10 @@ type Target struct {
 
 type resolver struct {
 	files     map[string]bool
+	dirs      map[string]bool
 	goPkgs    map[string]bool // dirs containing .go files
 	goModules []goModule      // longest module path first
+	readFile  func(string) []byte
 }
 
 type goModule struct {
@@ -33,9 +36,12 @@ type goModule struct {
 }
 
 func newResolver(paths []string, readFile func(string) []byte) *resolver {
-	r := &resolver{files: map[string]bool{}, goPkgs: map[string]bool{}}
+	r := &resolver{files: map[string]bool{}, dirs: map[string]bool{}, goPkgs: map[string]bool{}, readFile: readFile}
 	for _, p := range paths {
 		r.files[p] = true
+		for d := path.Dir(p); d != "." && !r.dirs[d]; d = path.Dir(d) {
+			r.dirs[d] = true
+		}
 		if strings.HasSuffix(p, ".go") {
 			r.goPkgs[path.Dir(p)] = true
 		}
@@ -59,12 +65,12 @@ func goModulePath(gomod []byte) string {
 	return ""
 }
 
-func (r *resolver) resolve(grammarLang, from, spec string) Target {
+func (r *resolver) resolve(grammarLang, from, spec string, maybeSymbol bool) Target {
 	switch grammarLang {
 	case "Go":
 		return r.resolveGo(spec)
 	case "Python":
-		return r.resolvePython(from, spec)
+		return r.resolvePython(from, spec, maybeSymbol)
 	case "JavaScript", "TypeScript":
 		return r.resolveJS(from, spec)
 	}
@@ -112,6 +118,9 @@ func (r *resolver) resolveJS(from, spec string) Target {
 				}
 			}
 		}
+		if entry := r.packageEntry(b); entry != "" {
+			return Target{TargetFile, entry}
+		}
 		for _, ext := range jsExts[1:] {
 			if idx := path.Join(b, "index"+ext); r.files[idx] {
 				return Target{TargetFile, idx}
@@ -138,7 +147,7 @@ func npmPackage(spec string) string {
 	return parts[0]
 }
 
-func (r *resolver) resolvePython(from, spec string) Target {
+func (r *resolver) resolvePython(from, spec string, maybeSymbol bool) Target {
 	var candidates []string
 	if strings.HasPrefix(spec, ".") {
 		dots := len(spec) - len(strings.TrimLeft(spec, "."))
@@ -156,11 +165,14 @@ func (r *resolver) resolvePython(from, spec string) Target {
 		}
 	}
 	for _, c := range candidates {
-		if r.files[c+".py"] {
-			return Target{TargetFile, c + ".py"}
+		if t, ok := r.pyModule(c); ok {
+			return t
 		}
-		if r.files[path.Join(c, "__init__.py")] {
-			return Target{TargetFile, path.Join(c, "__init__.py")}
+	}
+	// "from . import name" where name is defined in the package's __init__.py.
+	if maybeSymbol {
+		if init := path.Join(path.Dir(candidates[0]), "__init__.py"); r.files[init] {
+			return Target{TargetFile, init}
 		}
 	}
 	if strings.HasPrefix(spec, ".") {
@@ -172,6 +184,46 @@ func (r *resolver) resolvePython(from, spec string) Target {
 func topDir(p string) string {
 	if i := strings.IndexByte(p, '/'); i > 0 {
 		return p[:i]
+	}
+	return ""
+}
+
+// pyModule resolves a slash path to a module file, package __init__, or namespace package dir.
+func (r *resolver) pyModule(p string) (Target, bool) {
+	switch {
+	case r.files[p+".py"]:
+		return Target{TargetFile, p + ".py"}, true
+	case r.files[path.Join(p, "__init__.py")]:
+		return Target{TargetFile, path.Join(p, "__init__.py")}, true
+	case r.dirs[p]:
+		return Target{TargetPackage, p}, true // PEP 420 namespace package
+	}
+	return Target{}, false
+}
+
+// packageEntry resolves a directory import through its package.json (types, module, main).
+func (r *resolver) packageEntry(dir string) string {
+	pj := path.Join(dir, "package.json")
+	if !r.files[pj] {
+		return ""
+	}
+	var pkg struct{ Types, Typings, Module, Main string }
+	if json.Unmarshal(r.readFile(pj), &pkg) != nil {
+		return ""
+	}
+	for _, f := range []string{pkg.Types, pkg.Typings, pkg.Module, pkg.Main} {
+		if f == "" {
+			continue
+		}
+		p := path.Join(dir, f)
+		if r.files[p] {
+			return p
+		}
+		for _, ext := range jsExts[1:] {
+			if r.files[p+ext] {
+				return p + ext
+			}
+		}
 	}
 	return ""
 }

@@ -11,7 +11,7 @@ the workspace, IDE and remote features are layered on top.
 - [x] `kuli scan`, `stats`, `find`, `deps`
 - [ ] Filter language stdlibs out of "external modules" (Python, Node builtins)
 - [ ] Incremental re-scan by content hash (only changed files)
-- [ ] Report broken imports (targets that don't exist) as findings
+- [x] Report broken imports (targets that don't exist) as findings
 - [ ] Infra graph: Compose services, K8s Deployments/Services, Dockerfile → image
 - [ ] Framework detection: HTTP routes (FastAPI, Express, Next.js, Gin/Chi), ORM models
 
@@ -22,7 +22,8 @@ the workspace, IDE and remote features are layered on top.
 - [ ] `kuli ask "…"` grounded in graph + FTS, answers with file:line citations
 
 ## v0.3 — Agents
-- [ ] `kuli mcp` — MCP server: search, get_dependencies, get_architecture, get_related_files…
+- [x] `kuli mcp` — MCP server: overview, search, dependencies, file outline, broken imports, rescan
+- [ ] MCP: get_architecture / get_related_files once the infra + route graph exists
 - [ ] Agent runtime: CLI adapters (Claude Code, Codex, OpenCode, Aider) on supervised PTYs
 
 ## v0.4 — Web UI (`kuli serve`)

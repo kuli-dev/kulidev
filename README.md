@@ -12,9 +12,9 @@ Every fact KuliDev records points back to the file and line that proves it. No v
 
 ## Status
 
-Early. **v0.1 is the knowledge engine**: scan, search and dependency queries from the CLI.
-Docs generation (`kuli docs`), Q&A, an MCP server for coding agents, and the web UI come next —
-see [docs/ROADMAP.md](docs/ROADMAP.md).
+Early. **v0.1 is the knowledge engine**: scan, search and dependency queries from the CLI,
+plus an MCP server so coding agents can use the same knowledge. Docs generation
+(`kuli docs`), Q&A and the web UI come next — see [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Quick start
 
@@ -39,12 +39,31 @@ Most depended-on (internal):
    374 ← app/core/exceptions.py
 ```
 
+## Use it from your coding agent (MCP)
+
+```sh
+claude mcp add kulidev -- kuli mcp -C /path/to/repo     # Claude Code
+```
+
+`kuli mcp` scans the repo on first start, then serves:
+
+| Tool | What the agent gets |
+|---|---|
+| `kuli_overview` | languages, symbol counts, infra files, hotspots |
+| `kuli_search` | definitions/files/modules matching words, with `file:line` |
+| `kuli_dependencies` | what a file/package/module imports, or **who imports it** (impact analysis) |
+| `kuli_file_symbols` | outline of a file with line ranges — no need to read it all |
+| `kuli_broken_imports` | imports pointing at files that don't exist |
+| `kuli_rescan` | rebuild after changes |
+
+Every answer warns the agent when `HEAD` has moved since the last scan.
+
 ## What it understands today
 
 | | |
 |---|---|
 | **Parsed with Tree-sitter** | Go, Python, JavaScript, TypeScript/TSX — functions, methods, classes, structs, interfaces, types, enums, imports |
-| **Import resolution** | Go modules (multi-module), Python absolute/relative, JS/TS relative, `index.*`, ESM `.js→.ts`, `@/` `~/` aliases |
+| **Import resolution** | Go modules (multi-module), Python absolute/relative/namespace packages, JS/TS relative, `index.*`, `package.json` entry points, ESM `.js→.ts`, `@/` `~/` aliases |
 | **Detected** | Dockerfile, Compose, Kubernetes YAML, kustomize, Helm, Terraform, GitHub Actions, Jenkins, GitLab CI, SQL migrations, dependency manifests |
 | **Storage** | One SQLite file with full-text search; git-ignored by default |
 

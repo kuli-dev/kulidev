@@ -205,3 +205,56 @@ func (s *Store) Deps(target string, reverse bool) (resolved string, hits []Hit, 
 	}
 	return resolved, hits, rows.Err()
 }
+
+// FileSymbols lists the definitions in one file, in source order.
+func (s *Store) FileSymbols(file string) ([]Hit, error) {
+	file = path.Clean(strings.TrimPrefix(file, "./"))
+	rows, err := s.DB.Query(`SELECT kind, qualname, path, line_start, line_end FROM nodes
+		WHERE path = ? AND kind NOT IN ('FILE','PACKAGE','EXTERNAL') ORDER BY line_start`, file)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Hit
+	for rows.Next() {
+		var h Hit
+		var end int
+		if err := rows.Scan(&h.Kind, &h.Name, &h.Path, &h.Line, &end); err != nil {
+			return nil, err
+		}
+		if i := strings.IndexByte(h.Name, '#'); i >= 0 {
+			h.Name = h.Name[i+1:]
+		}
+		h.Detail = fmt.Sprintf("lines %d-%d", h.Line, end)
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+// BrokenImports lists internal-looking imports whose target does not exist in the repo.
+func (s *Store) BrokenImports() ([]Hit, error) {
+	rows, err := s.DB.Query(`SELECT e.path, e.line_start, substr(d.name, 12) FROM edges e
+		JOIN nodes d ON d.id = e.dst
+		WHERE e.rel = 'IMPORTS' AND d.kind = 'EXTERNAL' AND d.name LIKE 'unresolved:%'
+		ORDER BY e.path, e.line_start`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Hit
+	for rows.Next() {
+		h := Hit{Kind: "IMPORT"}
+		if err := rows.Scan(&h.Path, &h.Line, &h.Name); err != nil {
+			return nil, err
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}
+
+// ScannedCommit returns the commit recorded by the latest scan ("" if unknown).
+func (s *Store) ScannedCommit() string {
+	var c sql.NullString
+	s.DB.QueryRow(`SELECT commit_hash FROM runs ORDER BY id DESC LIMIT 1`).Scan(&c)
+	return c.String
+}

@@ -22,6 +22,9 @@ func (s Symbol) QualifiedName() string {
 type Import struct {
 	Spec string
 	Line int // 1-based
+	// MaybeSymbol is set for Python "from . import x": x may be a module or a name
+	// defined in the package's __init__.py.
+	MaybeSymbol bool
 }
 
 // FileResult is everything the scanner learned about one file.

@@ -76,6 +76,7 @@ func (s *Server[T]) Run() { fmt.Println(str.ToUpper("x")) }
 func TestPython(t *testing.T) {
 	syms, imps := parse(t, Python, `import os, json as j
 from .models import User
+from . import prompts, utils as u
 from app.db import session
 
 class PaymentService:
@@ -90,7 +91,7 @@ def main():
 		"PaymentService": "class", "PaymentService.charge": "method",
 		"PaymentService.helper": "method", "main": "function",
 	})
-	expectImports(t, specs(imps), "os", "json", ".models", "app.db")
+	expectImports(t, specs(imps), "os", "json", ".models", "app.db", ".prompts", ".utils")
 }
 
 func TestTypeScript(t *testing.T) {

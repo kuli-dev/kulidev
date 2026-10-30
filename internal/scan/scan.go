@@ -51,7 +51,7 @@ func Scan(root string) (*Result, error) {
 	}
 	sort.Strings(paths)
 
-	res := &Result{Root: root, Commit: gitCommit(root), Started: start}
+	res := &Result{Root: root, Commit: GitCommit(root), Started: start}
 	res.Files = make([]model.FileResult, len(paths))
 
 	jobs := make(chan int)
@@ -101,7 +101,7 @@ func Scan(root string) (*Result, error) {
 		for _, imp := range f.Imports {
 			res.Imports = append(res.Imports, ImportEdge{
 				From: f.Path, Line: imp.Line, Spec: imp.Spec,
-				Target: r.resolve(f.Lang, f.Path, imp.Spec),
+				Target: r.resolve(f.Lang, f.Path, imp.Spec, imp.MaybeSymbol),
 			})
 		}
 	}

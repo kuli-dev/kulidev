@@ -131,7 +131,10 @@ func (s *Store) Save(res *scan.Result) (runID int64, err error) {
 		case scan.TargetFile:
 			toID = ins.ids["FILE\x00"+imp.Target.Ref]
 		case scan.TargetPackage:
-			toID = ins.ids["PACKAGE\x00pkg:"+imp.Target.Ref]
+			// Go packages already exist; Python namespace packages are created on first use.
+			if toID, err = ins.node("PACKAGE", imp.Target.Ref, "pkg:"+imp.Target.Ref, imp.Target.Ref, 0, 0, ""); err != nil {
+				return 0, err
+			}
 		}
 		if toID == 0 {
 			if toID, err = ins.node("EXTERNAL", imp.Target.Ref, "ext:"+imp.Target.Ref, "", 0, 0, ""); err != nil {

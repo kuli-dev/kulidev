@@ -58,6 +58,7 @@ Docs-nya mana? Ini.`,
 		newStatsCmd(o),
 		newFindCmd(o),
 		newDepsCmd(o),
+		newMCPCmd(o),
 		&cobra.Command{
 			Use:   "version",
 			Short: "Print the version",

@@ -95,7 +95,7 @@ func (pr *Parser) Parse(grammarID string, src []byte) ([]model.Symbol, []model.I
 
 	matches := pr.cursor.Matches(q, tree.RootNode(), src)
 	for m := matches.Next(); m != nil; m = matches.Next() {
-		var def *ts.Node
+		var def, importNode *ts.Node
 		var kind, name, recv, typebody, fn, imp string
 		impLine := 0
 		for i := range m.Captures {
@@ -113,7 +113,8 @@ func (pr *Parser) Parse(grammarID string, src []byte) ([]model.Symbol, []model.I
 			case cn == "fn":
 				fn = c.Node.Utf8Text(src)
 			case cn == "import":
-				imp = c.Node.Utf8Text(src)
+				n := c.Node
+				imp, importNode = n.Utf8Text(src), &n
 				impLine = int(c.Node.StartPosition().Row) + 1
 			}
 		}
@@ -122,7 +123,17 @@ func (pr *Parser) Parse(grammarID string, src []byte) ([]model.Symbol, []model.I
 			if fn != "" && fn != "require" {
 				continue
 			}
-			if spec := unquote(imp); spec != "" {
+			spec := unquote(imp)
+			if grammarID == Python && strings.Trim(spec, ".") == "" {
+				// "from . import a, b": a and b are sibling modules (or names in __init__).
+				if subs := pyFromNames(importNode, src); len(subs) > 0 {
+					for _, sub := range subs {
+						imps = append(imps, model.Import{Spec: spec + sub, Line: impLine, MaybeSymbol: true})
+					}
+					continue
+				}
+			}
+			if spec != "" {
 				imps = append(imps, model.Import{Spec: spec, Line: impLine})
 			}
 			continue
@@ -193,4 +204,23 @@ func goReceiverType(recv string) string {
 
 func unquote(s string) string {
 	return strings.Trim(strings.TrimSpace(s), "\"'`")
+}
+
+// pyFromNames returns the imported names of the import_from_statement containing n.
+func pyFromNames(n *ts.Node, src []byte) []string {
+	stmt := n.Parent()
+	if stmt == nil || stmt.Kind() != "import_from_statement" {
+		return nil
+	}
+	var out []string
+	for _, c := range stmt.ChildrenByFieldName("name", stmt.Walk()) {
+		if c.Kind() == "aliased_import" {
+			if nm := c.ChildByFieldName("name"); nm != nil {
+				out = append(out, nm.Utf8Text(src))
+			}
+			continue
+		}
+		out = append(out, c.Utf8Text(src))
+	}
+	return out
 }

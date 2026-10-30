@@ -73,8 +73,8 @@ func gitFiles(root string) ([]string, bool) {
 	return out, true
 }
 
-// gitCommit returns HEAD's commit hash, or "" outside a git repo.
-func gitCommit(root string) string {
+// GitCommit returns HEAD's commit hash, or "" outside a git repo.
+func GitCommit(root string) string {
 	b, err := exec.Command("git", "-C", root, "rev-parse", "HEAD").Output()
 	if err != nil {
 		return ""
