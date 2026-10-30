@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -305,6 +306,9 @@ func TestDNSRebindingRefused(t *testing.T) {
 }
 
 func TestTerminals(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("no PTY support on Windows")
+	}
 	t.Setenv("SHELL", "/bin/sh")
 	ts, _ := setupWith(t, Options{Loopback: true, Terminals: true})
 	post := func(path string, header bool) (int, map[string]any) {

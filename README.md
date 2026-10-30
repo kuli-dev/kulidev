@@ -16,10 +16,19 @@ Early. **v0.1 is the knowledge engine**: scan, search and dependency queries fro
 an MCP server so coding agents can use the same knowledge, DocsMana handover docs and
 `kuli ask` for cited answers, and a web UI (`kuli serve`). What's next is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
+## Install
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/kuli-dev/kulidev/main/install.sh | sh
+```
+
+Linux and macOS (x86-64 and ARM); Windows zips are on the releases page (the terminal and
+agents need WSL there). The script verifies the SHA-256 checksum before installing to
+`~/.local/bin`. From source: `make build` (Go and a C compiler for Tree-sitter).
+
 ## Quick start
 
 ```sh
-make build            # → bin/kuli  (needs Go 1.23+ and a C compiler for Tree-sitter)
 
 kuli scan ./my-repo   # build the knowledge base in my-repo/.kulidev/ (later runs are incremental)
 kuli -C my-repo stats

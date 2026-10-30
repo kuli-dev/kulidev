@@ -1,0 +1,75 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.goos }}/${{ matrix.goarch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, goos: linux, goarch: amd64 }
+          - { os: ubuntu-24.04-arm, goos: linux, goarch: arm64 }
+          - { os: macos-latest, goos: darwin, goarch: arm64 }
+          # Intel Macs: cross-compiled on Apple Silicon (clang targets x86_64 natively).
+          - { os: macos-latest, goos: darwin, goarch: amd64, cc: "clang -arch x86_64" }
+          - { os: windows-latest, goos: windows, goarch: amd64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Build
+        shell: bash
+        env:
+          CGO_ENABLED: "1"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CC: ${{ matrix.cc }}
+        run: |
+          [ -n "$CC" ] || unset CC
+          ext=""; [ "$GOOS" = windows ] && ext=".exe"
+          mkdir -p out/pkg
+          go build -trimpath -ldflags "-s -w -X github.com/kuli-dev/kulidev/internal/cli.Version=${GITHUB_REF_NAME}" \
+            -o "out/pkg/kuli${ext}" ./cmd/kuli
+          cp LICENSE README.md CHANGELOG.md out/pkg/
+          name="kuli_${GITHUB_REF_NAME#v}_${GOOS}_${GOARCH}"
+          cd out/pkg
+          if [ "$GOOS" = windows ]; then 7z a -bd "../${name}.zip" . >/dev/null; else tar -czf "../${name}.tar.gz" .; fi
+      - name: Smoke test
+        if: matrix.cc == ''
+        shell: bash
+        run: |
+          ext=""; [ "${{ matrix.goos }}" = windows ] && ext=".exe"
+          ./out/pkg/kuli${ext} version
+          ./out/pkg/kuli${ext} scan . --data-dir "$RUNNER_TEMP/kd"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kuli-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: out/kuli_*
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum kuli_* > checksums.txt && cat checksums.txt
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes=$(awk -v v="${GITHUB_REF_NAME#v}" '$0 ~ "^## "v {f=1; next} /^## / {f=0} f' CHANGELOG.md)
+          gh release create "$GITHUB_REF_NAME" dist/* --title "KuliDev $GITHUB_REF_NAME" --notes "${notes:-See CHANGELOG.md}" \
+            $( [[ "$GITHUB_REF_NAME" == *-* ]] && echo --prerelease )
