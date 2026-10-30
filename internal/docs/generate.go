@@ -174,7 +174,7 @@ func (g *generator) doc(ctx context.Context, id string) (*DocResult, error) {
 		}
 		parts = append(parts, section{markdown: "## Components"})
 		for i := 0; i < len(comps); i += 4 {
-			f := newFacts()
+			f := NewFacts()
 			var names []string
 			for _, c := range comps[i:min(i+4, len(comps))] {
 				r.componentFacts(f, c)

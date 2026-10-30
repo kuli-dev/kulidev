@@ -13,8 +13,8 @@ Every fact KuliDev records points back to the file and line that proves it. No v
 ## Status
 
 Early. **v0.1 is the knowledge engine**: scan, search and dependency queries from the CLI,
-an MCP server so coding agents can use the same knowledge, and DocsMana handover docs.
-Q&A and the web UI come next — see [docs/ROADMAP.md](docs/ROADMAP.md).
+an MCP server so coding agents can use the same knowledge, DocsMana handover docs and
+`kuli ask` for cited answers. The web UI comes next — see [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Quick start
 
@@ -55,6 +55,26 @@ graph, each tagged `[E#]`; every citation it writes is validated and turned into
 Credentials in config files are redacted before anything is sent to the model. With no
 model configured you still get facts-only docs.
 
+## Ask — `kuli ask "…"`
+
+```sh
+kuli ask "what happens when the model returns an empty answer?"
+```
+
+```
+When the model returns an empty answer, Client.Chat detects it and returns ErrEmptyReply.
+1. Detection: after unmarshaling, Chat checks whether the stripped content is empty (internal/llm/client.go:174-178).
+2. If the finish reason was "length" it returns ErrThinkingBudget instead (internal/llm/client.go:175-176).
+3. Ask propagates the error without producing an answer (internal/ask/ask.go:119-120).
+kuli: 67% of claims cited (5 citations)
+```
+
+The model turns your question into code-ish keywords; KuliDev searches names, doc comments
+and the words used inside function bodies, re-ranks by how much of the question each
+definition covers, and shows the model the relevant code (long functions are cut down to
+the lines that matter). Citations are validated exactly like DocsMana's. Without a model,
+`kuli ask` prints the evidence it found.
+
 ## Use it from your coding agent (MCP)
 
 ```sh
@@ -78,10 +98,10 @@ Every answer warns the agent when `HEAD` has moved since the last scan.
 
 | | |
 |---|---|
-| **Parsed with Tree-sitter** | Go, Python, JavaScript, TypeScript/TSX — functions, methods, classes, structs, interfaces, types, enums, imports |
+| **Parsed with Tree-sitter** | Go, Python, JavaScript, TypeScript/TSX — functions, methods, classes, structs, interfaces, types, enums, Go package vars/consts, imports, **doc comments & docstrings** |
 | **Import resolution** | Go modules (multi-module), Python absolute/relative/namespace packages, JS/TS relative, `index.*`, `package.json` entry points, ESM `.js→.ts`, `@/` `~/` aliases |
 | **Detected** | Dockerfile, Compose, Kubernetes YAML, kustomize, Helm, Terraform, GitHub Actions, Jenkins, GitLab CI, SQL migrations, dependency manifests |
-| **Storage** | One SQLite file with full-text search; git-ignored by default |
+| **Storage** | One SQLite file; FTS5 with stemming over names, docs and body words; git-ignored by default |
 
 ## Design principles
 

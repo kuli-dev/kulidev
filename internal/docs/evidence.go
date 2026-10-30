@@ -23,7 +23,7 @@ type Facts struct {
 	b     strings.Builder
 }
 
-func newFacts() *Facts { return &Facts{byKey: map[string]int{}} }
+func NewFacts() *Facts { return &Facts{byKey: map[string]int{}} }
 
 // Cite registers a source location and returns its tag, e.g. "[E7]".
 func (f *Facts) Cite(path string, line, end int) string {
@@ -98,10 +98,30 @@ func (s CiteStats) Coverage() float64 {
 	return float64(s.Grounded) / float64(s.Paragraphs)
 }
 
+var (
+	// "E2 L415, L420" → "E2 L415, E2 L420" so every line reference is checked.
+	multiLineRe = regexp.MustCompile(`E(\d+)\s*L(\d+(?:-\d+)?)((?:\s*,\s*L\d+(?:-\d+)?)+)`)
+	extraLineRe = regexp.MustCompile(`L\d+(?:-\d+)?`)
+	// Any bracketed E-tag the main pattern could not parse.
+	strayCiteRe = regexp.MustCompile(`\[E\d+[^\]\n]{0,40}\]`)
+)
+
+func normalizeCites(md string) string {
+	return multiLineRe.ReplaceAllStringFunc(md, func(m string) string {
+		sub := multiLineRe.FindStringSubmatch(m)
+		parts := []string{"E" + sub[1] + " L" + sub[2]}
+		for _, l := range extraLineRe.FindAllString(sub[3], -1) {
+			parts = append(parts, "E"+sub[1]+" "+l)
+		}
+		return strings.Join(parts, ", ")
+	})
+}
+
 // Resolve turns [E#] tags into Markdown links relative to linkBase, drops tags that
 // point at unknown evidence or out-of-range lines, and measures grounding.
 func (f *Facts) Resolve(md, linkBase string) (string, CiteStats) {
 	var st CiteStats
+	md = normalizeCites(md)
 	// Grounding is judged on the model's own citations, before links are rendered,
 	// so links the model invents itself never count as evidence.
 	forEachClaim(md, func(claim string) {
@@ -130,6 +150,11 @@ func (f *Facts) Resolve(md, linkBase string) (string, CiteStats) {
 			return ""
 		}
 		return "(" + strings.Join(links, ", ") + ")"
+	})
+	// Never let an unparseable tag through: it would look like evidence but isn't.
+	out = strayCiteRe.ReplaceAllStringFunc(out, func(string) string {
+		st.Removed++
+		return ""
 	})
 	return out, st
 }
@@ -199,7 +224,11 @@ func isListItem(t string) bool {
 	return i > 0 && i < len(t) && t[i] == '.'
 }
 
+// link renders evidence as a Markdown link, or as plain "path:line" when base is "".
 func link(e Evidence, base string) string {
+	if base == "" {
+		return e.loc()
+	}
 	target := filepath.ToSlash(filepath.Join(base, e.Path))
 	label := e.loc()
 	if e.Line > 0 {

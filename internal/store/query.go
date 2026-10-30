@@ -101,32 +101,52 @@ func (s *Store) counts(q string, args ...any) ([]Count, error) {
 // Hit is a search result or a dependency reference, always with evidence.
 type Hit struct {
 	Kind, Name, Path string
-	Line             int
+	Line, EndLine    int
 	Detail           string // doc text for search hits; line range (+ doc) for outlines
 }
 
-// Find runs a full-text search over symbol, file and module names.
+// Find runs a full-text search over symbol, file and module names and docs; every
+// word must match there (body words are only used by FindAny).
 func (s *Store) Find(query string, limit int) ([]Hit, error) {
+	return s.search(strings.Fields(splitWords(query)), " AND ", limit, "{name words qualname path doc} : ")
+}
+
+// FindAny returns nodes matching any of the words, best matches (most words, name
+// hits) first. It is the retrieval step for questions.
+func (s *Store) FindAny(words []string, limit int) ([]Hit, error) {
+	var all []string
+	for _, w := range words {
+		all = append(all, strings.Fields(splitWords(w))...)
+	}
+	return s.search(all, " OR ", limit, "")
+}
+
+// search builds an FTS5 query; colFilter (e.g. "{name doc} : ") restricts columns.
+func (s *Store) search(words []string, op string, limit int, colFilter string) ([]Hit, error) {
 	var terms []string
-	for _, w := range strings.Fields(splitWords(query)) {
+	seen := map[string]bool{}
+	for _, w := range words {
 		w = strings.Map(func(r rune) rune {
-			if r == '"' {
+			if r == '"' || r == '*' {
 				return -1
 			}
 			return r
 		}, w)
-		if w != "" {
-			terms = append(terms, `"`+w+`"*`)
+		if w != "" && !seen[w] {
+			seen[w] = true
+			terms = append(terms, colFilter+`"`+w+`"*`)
 		}
 	}
 	if len(terms) == 0 {
 		return nil, fmt.Errorf("empty query")
 	}
 	// Name matches rank above matches that only hit the doc text.
-	rows, err := s.DB.Query(`SELECT n.kind, n.qualname, COALESCE(n.path,''), COALESCE(n.line_start,0), COALESCE(n.doc,'')
+	rows, err := s.DB.Query(`SELECT n.kind, n.qualname, COALESCE(n.path,''), COALESCE(n.line_start,0),
+			COALESCE(n.line_end,0), COALESCE(n.doc,'')
 		FROM nodes_fts f JOIN nodes n ON n.id = f.rowid
 		WHERE nodes_fts MATCH ?
-		ORDER BY (n.kind IN ('FILE','PACKAGE','EXTERNAL')), bm25(nodes_fts, 10.0, 10.0, 5.0, 2.0, 1.0) LIMIT ?`, strings.Join(terms, " AND "), limit)
+		ORDER BY (n.kind IN ('FILE','PACKAGE','EXTERNAL')), bm25(nodes_fts, 10.0, 10.0, 5.0, 2.0, 1.0, 0.3) LIMIT ?`,
+		strings.Join(terms, op), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -134,7 +154,7 @@ func (s *Store) Find(query string, limit int) ([]Hit, error) {
 	var out []Hit
 	for rows.Next() {
 		var h Hit
-		if err := rows.Scan(&h.Kind, &h.Name, &h.Path, &h.Line, &h.Detail); err != nil {
+		if err := rows.Scan(&h.Kind, &h.Name, &h.Path, &h.Line, &h.EndLine, &h.Detail); err != nil {
 			return nil, err
 		}
 		if i := strings.IndexByte(h.Name, '#'); i >= 0 {

@@ -166,11 +166,25 @@ func Bare() {}
 
 // Charge takes money.
 func (s *Service) Charge() {}
+
+// ErrDeclined means the card was refused.
+var ErrDeclined = errors.New("declined")
+
+const (
+	// MaxRetries bounds gateway retries.
+	MaxRetries = 3
+)
+
+func local() { var notIndexed = 1; _ = notIndexed }
 `)
 	if file != "Package pay charges customers." {
 		t.Errorf("go file doc = %q", file)
 	}
-	want := map[string]string{"Service": "Service charges cards via the gateway.", "Bare": "", "Service.Charge": "Charge takes money."}
+	want := map[string]string{"Service": "Service charges cards via the gateway.", "Bare": "", "Service.Charge": "Charge takes money.",
+		"ErrDeclined": "ErrDeclined means the card was refused.", "MaxRetries": "MaxRetries bounds gateway retries."}
+	if _, ok := got["notIndexed"]; ok {
+		t.Error("function-local var must not be indexed")
+	}
 	for k, v := range want {
 		if got[k] != v {
 			t.Errorf("go doc %s = %q, want %q", k, got[k], v)

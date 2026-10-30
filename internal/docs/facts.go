@@ -100,7 +100,7 @@ func topN(m map[string]int, n int) []ranked {
 // ---- overview -------------------------------------------------------------
 
 func (r *repo) overviewFacts() *Facts {
-	f := newFacts()
+	f := NewFacts()
 	parsed, langLines := 0, map[string]int{}
 	for _, fi := range r.snap.Files {
 		if fi.Parsed {
@@ -169,7 +169,7 @@ func (r *repo) overviewFacts() *Facts {
 		n := min(len(lines), 80)
 		f.Line("\nREADME excerpt %s:", f.Cite(readme, 1, n))
 		for i := 0; i < n; i++ {
-			f.Line("%4d| %s", i+1, redact(lines[i]))
+			f.Line("%4d| %s", i+1, Redact(lines[i]))
 		}
 	}
 	return f
@@ -339,7 +339,7 @@ var infraKinds = []struct {
 const infraLines = 80
 
 func (r *repo) infraFacts() *Facts {
-	f := newFacts()
+	f := NewFacts()
 	found := false
 	for _, k := range infraKinds {
 		ps := r.snap.Manifests[k.kind]
@@ -353,7 +353,7 @@ func (r *repo) infraFacts() *Facts {
 			n := min(len(lines), infraLines)
 			f.Line("\nFILE %s %s (first %d of %d lines; secrets redacted):", p, f.Cite(p, 1, n), n, len(lines))
 			for i := 0; i < n; i++ {
-				f.Line("%4d| %s", i+1, redact(lines[i]))
+				f.Line("%4d| %s", i+1, Redact(lines[i]))
 			}
 		}
 		f.Line("")
@@ -395,7 +395,8 @@ var (
 	urlCredRe = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.\-]*://[^:/\s@]*:)([^@\s/]+)@`)
 )
 
-func redact(line string) string {
+// Redact masks credentials in one line of text.
+func Redact(line string) string {
 	line = urlCredRe.ReplaceAllStringFunc(line, func(m string) string {
 		sub := urlCredRe.FindStringSubmatch(m)
 		if strings.HasPrefix(sub[2], "$") {
@@ -422,7 +423,7 @@ var (
 )
 
 func (r *repo) gettingStartedFacts() *Facts {
-	f := newFacts()
+	f := NewFacts()
 	f.Line("Repository: %s", r.name())
 
 	for _, p := range firstN(r.snap.Manifests["package.json"], 4) {
@@ -475,7 +476,7 @@ func (r *repo) gettingStartedFacts() *Facts {
 			}
 			f.Line("\nREADME section %s:", f.Cite(readme, i+1, end))
 			for j := i; j < end; j++ {
-				f.Line("%4d| %s", j+1, redact(lines[j]))
+				f.Line("%4d| %s", j+1, Redact(lines[j]))
 			}
 			i = end - 1
 		}

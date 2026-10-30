@@ -19,7 +19,9 @@ the workspace, IDE and remote features are layered on top.
 - [x] LLM provider: any OpenAI-compatible endpoint (vLLM/Ollama/LM Studio/llama.cpp/OpenRouter/OpenAI)
 - [x] `kuli docs` → `.kulidev/knowledge/*.md` + Mermaid; citations validated, coverage recorded, secrets redacted
 - [x] Freshness: `kuli docs status` → CURRENT / STALE per document, keyed to evidence file hashes
-- [ ] `kuli ask "…"` grounded in graph + FTS, answers with file:line citations
+- [x] `kuli ask "…"`: keyword expansion, body-word recall, re-ranking, focused code excerpts, validated file:line citations
+- [x] Doc comments / docstrings in the graph, search and DocsMana facts
+- [ ] `kuli_ask` over MCP? (agents can already search; revisit if useful)
 
 ## v0.3 — Agents
 - [x] `kuli mcp` — MCP server: overview, search, dependencies, file outline, broken imports, rescan

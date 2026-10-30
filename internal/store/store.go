@@ -25,7 +25,7 @@ const DBFile = "kulidev.db"
 
 // schemaVersion changes whenever the schema does. The database is a cache rebuilt by
 // `kuli scan`, so an older one is simply dropped instead of migrated.
-const schemaVersion = 2
+const schemaVersion = 4
 
 // ErrStale is returned when the knowledge base was built by an older kuli.
 var ErrStale = errors.New("knowledge base was built by an older kuli; run `kuli scan` to rebuild it")
@@ -145,7 +145,7 @@ func (s *Store) Save(res *scan.Result) (runID int64, err error) {
 		}
 		for _, sym := range f.Symbols {
 			q := f.Path + "#" + sym.QualifiedName()
-			id, e := ins.symbol(sym.Kind, sym.Name, q, f.Path, sym.LineStart, sym.LineEnd, f.Lang, sym.Container, sym.Doc)
+			id, e := ins.symbol(sym.Kind, sym.Name, q, f.Path, sym.LineStart, sym.LineEnd, f.Lang, sym.Container, sym.Doc, sym.Terms)
 			if e != nil {
 				return 0, e
 			}
@@ -202,7 +202,7 @@ func (in *inserter) prepare() (err error) {
 	if in.edgeSt, err = in.tx.Prepare(`INSERT INTO edges(src, dst, rel, path, line_start, line_end, origin, confidence) VALUES(?,?,?,?,?,?, 'static_analysis', 1.0)`); err != nil {
 		return err
 	}
-	in.ftsSt, err = in.tx.Prepare(`INSERT INTO nodes_fts(rowid, name, words, qualname, path, doc) VALUES(?,?,?,?,?,?)`)
+	in.ftsSt, err = in.tx.Prepare(`INSERT INTO nodes_fts(rowid, name, words, qualname, path, doc, body) VALUES(?,?,?,?,?,?,?)`)
 	return err
 }
 
@@ -220,20 +220,20 @@ func (in *inserter) node(kind, name, qualname, path string, ls, le int, lang, do
 	if id, ok := in.ids[key]; ok {
 		return id, nil
 	}
-	id, err := in.symbol(kind, name, qualname, path, ls, le, lang, "", doc)
+	id, err := in.symbol(kind, name, qualname, path, ls, le, lang, "", doc, "")
 	if err == nil {
 		in.ids[key] = id
 	}
 	return id, err
 }
 
-func (in *inserter) symbol(kind, name, qualname, path string, ls, le int, lang, container, doc string) (int64, error) {
+func (in *inserter) symbol(kind, name, qualname, path string, ls, le int, lang, container, doc, terms string) (int64, error) {
 	r, err := in.nodeSt.Exec(kind, name, qualname, nullable(path), ls, le, nullable(lang), nullable(container), nullable(doc))
 	if err != nil {
 		return 0, err
 	}
 	id, _ := r.LastInsertId()
-	_, err = in.ftsSt.Exec(id, name, splitWords(name+" "+container), qualname, path, doc)
+	_, err = in.ftsSt.Exec(id, name, splitWords(name+" "+container), qualname, path, doc, terms)
 	return id, err
 }
 

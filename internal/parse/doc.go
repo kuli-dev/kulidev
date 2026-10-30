@@ -18,10 +18,17 @@ func symbolDoc(grammarID string, def *ts.Node, src []byte) string {
 	}
 	n := def
 	switch {
-	case grammarID == Go && def.Kind() == "type_spec":
-		// "// Foo does…" sits above `type Foo struct`, i.e. above the type_declaration.
-		if p := def.Parent(); p != nil && p.Kind() == "type_declaration" {
-			n = p
+	case grammarID == Go && (def.Kind() == "type_spec" || def.Kind() == "var_spec" || def.Kind() == "const_spec"):
+		// "// Foo does…" sits above `type Foo struct` / `var Foo = …`, i.e. above the
+		// declaration, unless the spec is inside a ( … ) group with its own comment.
+		if c := leadingComment(n, src); c != "" {
+			return c
+		}
+		for p := def.Parent(); p != nil; p = p.Parent() {
+			if k := p.Kind(); k == "type_declaration" || k == "var_declaration" || k == "const_declaration" {
+				n = p
+				break
+			}
 		}
 	case grammarID != Go:
 		// `export const f = () => …` / `export class C` carry the comment on the wrapper.

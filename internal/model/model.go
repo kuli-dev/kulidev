@@ -9,6 +9,7 @@ type Symbol struct {
 	LineStart int    // 1-based
 	LineEnd   int    // 1-based, inclusive
 	Doc       string // doc comment / docstring, first paragraph
+	Terms     string // distinct words used in the body, for search recall (not stored)
 }
 
 // QualifiedName returns Container.Name, or Name when there is no container.

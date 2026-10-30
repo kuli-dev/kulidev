@@ -155,6 +155,7 @@ func (pr *Parser) Parse(grammarID string, src []byte) (*Result, error) {
 			LineStart: int(def.StartPosition().Row) + 1,
 			LineEnd:   int(def.EndPosition().Row) + 1,
 			Doc:       symbolDoc(grammarID, def, src),
+			Terms:     bodyTerms(def.Utf8Text(src)),
 		}
 		switch {
 		case grammarID == Go && kind == "method":

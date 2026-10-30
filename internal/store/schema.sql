@@ -58,4 +58,5 @@ CREATE TABLE IF NOT EXISTS manifests (
     kind TEXT NOT NULL
 );
 
-CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(name, words, qualname, path, doc);
+-- porter stemming: 'redaction' finds Redact, 'secrets' finds secret.
+CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(name, words, qualname, path, doc, body, tokenize = 'porter unicode61');

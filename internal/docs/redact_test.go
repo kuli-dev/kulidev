@@ -20,11 +20,11 @@ func TestRedact(t *testing.T) {
 		"https://github.com/kuli-dev/kulidev": "https://github.com/kuli-dev/kulidev",
 	}
 	for in, want := range cases {
-		if got := redact(in); got != want {
-			t.Errorf("redact(%q)\n got %q\nwant %q", in, got, want)
+		if got := Redact(in); got != want {
+			t.Errorf("Redact(%q)\n got %q\nwant %q", in, got, want)
 		}
-		if strings.Contains(redact(in), "hunter2") || strings.Contains(redact(in), "s3cr3t") || strings.Contains(redact(in), "p4ss") {
-			t.Errorf("secret leaked: %q", redact(in))
+		if strings.Contains(Redact(in), "hunter2") || strings.Contains(Redact(in), "s3cr3t") || strings.Contains(Redact(in), "p4ss") {
+			t.Errorf("secret leaked: %q", Redact(in))
 		}
 	}
 }

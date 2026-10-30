@@ -9,15 +9,13 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/kuli-dev/kulidev/internal/docs"
-	"github.com/kuli-dev/kulidev/internal/llm"
 )
 
 func newDocsCmd(o *options) *cobra.Command {
 	var (
-		noLLM     bool
-		only      []string
-		cfg       llm.Config
-		maxTokens int
+		noLLM bool
+		only  []string
+		lf    llmFlags
 	)
 	cmd := &cobra.Command{
 		Use:   "docs",
@@ -58,8 +56,7 @@ before anything is sent to the model.`,
 
 			opts := docs.Options{OutDir: filepath.Join(dir, "knowledge"), Only: only, Version: Version, Log: os.Stderr}
 			if !noLLM {
-				cfg.MaxTokens = maxTokens
-				c, err := llm.New(cfg.FromEnv())
+				c, err := lf.client()
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "kuli: %v\nkuli: writing facts-only docs (use --no-llm to silence this)\n", err)
 				} else {
@@ -88,11 +85,7 @@ before anything is sent to the model.`,
 	}
 	cmd.Flags().BoolVar(&noLLM, "no-llm", false, "write facts-only documents without calling a model")
 	cmd.Flags().StringSliceVar(&only, "only", nil, "generate only these documents ("+strings.Join(docs.DocIDs, ",")+")")
-	cmd.Flags().StringVar(&cfg.BaseURL, "llm-url", "", "OpenAI-compatible base URL (default $KULI_LLM_BASE_URL)")
-	cmd.Flags().StringVar(&cfg.Model, "llm-model", "", "model name (default $KULI_LLM_MODEL)")
-	cmd.Flags().Float64Var(&cfg.Temperature, "temperature", 0.2, "sampling temperature")
-	cmd.Flags().IntVar(&maxTokens, "max-tokens", 4096, "max tokens per model reply (reasoning models count thinking here)")
-	cmd.Flags().StringVar(&cfg.ReasoningEffort, "reasoning-effort", "", "send reasoning_effort (e.g. none, low) for reasoning models (default $KULI_LLM_REASONING_EFFORT)")
+	lf.add(cmd, 4096)
 	cmd.AddCommand(newDocsStatusCmd(o))
 	return cmd
 }
