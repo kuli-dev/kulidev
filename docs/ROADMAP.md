@@ -16,9 +16,9 @@ the workspace, IDE and remote features are layered on top.
 - [ ] Framework detection: HTTP routes (FastAPI, Express, Next.js, Gin/Chi), ORM models
 
 ## v0.2 — DocsMana (handover docs)
-- [ ] LLM provider interface: OpenAI-compatible (vLLM/Ollama/LM Studio/…) + Anthropic
-- [ ] `kuli docs` → `.kulidev/knowledge/*.md` + Mermaid; every claim cites evidence
-- [ ] Freshness: CURRENT / STALE / NEEDS_REVIEW per document, keyed to source commit
+- [x] LLM provider: any OpenAI-compatible endpoint (vLLM/Ollama/LM Studio/llama.cpp/OpenRouter/OpenAI)
+- [x] `kuli docs` → `.kulidev/knowledge/*.md` + Mermaid; citations validated, coverage recorded, secrets redacted
+- [x] Freshness: `kuli docs status` → CURRENT / STALE per document, keyed to evidence file hashes
 - [ ] `kuli ask "…"` grounded in graph + FTS, answers with file:line citations
 
 ## v0.3 — Agents

@@ -13,8 +13,8 @@ Every fact KuliDev records points back to the file and line that proves it. No v
 ## Status
 
 Early. **v0.1 is the knowledge engine**: scan, search and dependency queries from the CLI,
-plus an MCP server so coding agents can use the same knowledge. Docs generation
-(`kuli docs`), Q&A and the web UI come next — see [docs/ROADMAP.md](docs/ROADMAP.md).
+an MCP server so coding agents can use the same knowledge, and DocsMana handover docs.
+Q&A and the web UI come next — see [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Quick start
 
@@ -38,6 +38,22 @@ Most depended-on (internal):
    796 ← app/core/database.py
    374 ← app/core/exceptions.py
 ```
+
+## DocsMana — `kuli docs` (docs-nya mana? ini.)
+
+```sh
+export KULI_LLM_BASE_URL=http://localhost:11434/v1   # any OpenAI-compatible endpoint:
+export KULI_LLM_MODEL=qwen3:8b                       # Ollama, vLLM, LM Studio, llama.cpp, OpenRouter, OpenAI…
+kuli docs                 # → .kulidev/knowledge/*.md
+kuli docs status          # which docs went STALE because the code they cite changed
+```
+
+Writes **project overview, architecture (with a Mermaid component map), dependency map,
+infrastructure and getting-started** docs. The model only sees facts extracted from the
+graph, each tagged `[E#]`; every citation it writes is validated and turned into a
+`file:line` link, invented ones are removed, and each doc records its citation coverage.
+Credentials in config files are redacted before anything is sent to the model. With no
+model configured you still get facts-only docs.
 
 ## Use it from your coding agent (MCP)
 
