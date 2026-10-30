@@ -161,3 +161,36 @@ export function FolderDialog({ onPick, onClose }: { onPick: (path: string) => vo
     </div>
   );
 }
+
+// RecentPicker switches workspaces: recent folders first, filtered as you type
+// (Ctrl+R, like VS Code's Open Recent), with "Open Folder…" for anything else.
+export function RecentPicker({ recent, current, onPick, onBrowse, onClose }: {
+  recent: RecentFolder[]; current?: string; onPick: (p: string) => void; onBrowse: () => void; onClose: () => void;
+}) {
+  const [q, setQ] = useState("");
+  const [sel, setSel] = useState(0);
+  const list = recent.filter((r) => r.path !== current && (r.name + " " + r.path).toLowerCase().includes(q.trim().toLowerCase()));
+  const rows = [...list.map((r) => ({ key: r.path, run: () => onPick(r.path), r })), { key: "browse", run: onBrowse, r: null }];
+  useEffect(() => setSel(0), [q]);
+  function key(e: React.KeyboardEvent) {
+    if (e.key === "Escape") onClose();
+    else if (e.key === "ArrowDown") { e.preventDefault(); setSel((s) => Math.min(s + 1, rows.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setSel((s) => Math.max(s - 1, 0)); }
+    else if (e.key === "Enter") rows[sel]?.run();
+  }
+  return (
+    <div className="qo-backdrop" onMouseDown={onClose}>
+      <div className="qo" role="dialog" aria-label="Switch folder" onMouseDown={(e) => e.stopPropagation()}>
+        <input autoFocus value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={key} placeholder="Switch to a recent folder" aria-label="Folder name" />
+        <ul role="listbox">
+          {rows.map((row, i) => (
+            <li key={row.key} role="option" aria-selected={i === sel} className={`${i === sel ? "is-sel" : ""} ${row.r ? "" : "qo-action"}`}
+              onMouseEnter={() => setSel(i)} onClick={row.run}>
+              {row.r ? (<><span>{row.r.name}</span><span className="muted small">{row.r.path}</span></>) : <span>Open Folder…</span>}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}

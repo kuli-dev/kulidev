@@ -11,7 +11,7 @@ import { DocTab } from "./DocTab";
 import { clearFileCache, tabTitle, type NewTab, type Tab } from "./files";
 import { Icon } from "./Icons";
 import { DevicesPane } from "./Pair";
-import { FolderDialog, ProgressBar, isOpening, progressText, useWorkspace } from "./workspace";
+import { FolderDialog, ProgressBar, RecentPicker, isOpening, progressText, useWorkspace } from "./workspace";
 import { QuickOpen } from "./QuickOpen";
 
 import { ChangesPane } from "./Changes";
@@ -24,6 +24,7 @@ import { AgentsPane, DocsPane, Explorer, IssuesPane, SearchPane } from "./SidePa
 const CodeTab = lazy(() => import("./CodeTab").then((m) => ({ default: m.CodeTab })));
 // Likewise the map (React Flow) and the terminal (xterm.js).
 const MapView = lazy(() => import("../views/Map").then((m) => ({ default: m.MapView })));
+const SystemsView = lazy(() => import("../views/Systems").then((m) => ({ default: m.SystemsView })));
 const DiffTab = lazy(() => import("./DiffTab").then((m) => ({ default: m.DiffTab })));
 const TerminalPanel = lazy(() => import("./Terminal").then((m) => ({ default: m.TerminalPanel })));
 
@@ -112,6 +113,7 @@ export function Workbench() {
   const ws = useWorkspace();
   const canSwitch = !!ws.info?.canOpen;
   const [browse, setBrowse] = useState(false);
+  const [switcher, setSwitcher] = useState(false);
   const job = ws.job;
   const root = ov.data?.root;
   const lastPhase = useRef(job?.phase);
@@ -128,8 +130,12 @@ export function Workbench() {
     }
     lastPhase.current = job.phase;
   }, [job, root, ws.info?.root]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Several projects in the folder (repositories, or apps of a monorepo): the Systems view.
+  const sys = useLoad(api.systems, [ov.data?.root, ov.data?.scannedAt]);
+  const projects = sys.data && sys.data.projects.length >= 2 ? sys.data : null;
   function pickFolder(path: string) {
     setBrowse(false);
+    setSwitcher(false);
     if (dirty.size > 0 && !confirm(`${dirty.size} file(s) have unsaved changes that will be lost. Open another folder anyway?`)) return;
     ws.open(path);
   }
@@ -229,6 +235,7 @@ export function Workbench() {
       else if (k === "b") { e.preventDefault(); setView((v) => (v ? null : "explorer")); }
       else if (k === "l") { e.preventDefault(); setChat((c) => !c); }
       else if (k === "o" && canSwitch) { e.preventDefault(); setBrowse(true); }
+      else if (k === "r" && canSwitch && !e.shiftKey) { e.preventDefault(); setSwitcher(true); }
       else if (k === "w" && e.altKey) { e.preventDefault(); closeTab(active); }
     };
     addEventListener("keydown", key);
@@ -278,6 +285,10 @@ export function Workbench() {
           </button>
         ))}
         <button className="act" title="Map" aria-label="Open map" onClick={() => openTab({ kind: "map" })}><Icon.map /></button>
+        {projects && (
+          <button className="act" title={`Systems: ${projects.projects.length} projects and how they connect`} aria-label="Open systems diagram"
+            onClick={() => openTab({ kind: "systems" })}><Icon.systems /></button>
+        )}
         <span className="act-gap" />
         <button className={`act ${chat ? "on" : ""}`} title="Ask Kuli (Ctrl+L)" aria-label="Ask Kuli" aria-pressed={chat} onClick={() => setChat((c) => !c)}>
           <Icon.chat />
@@ -338,6 +349,11 @@ export function Workbench() {
               <MapView selected={current.component} />
             </Suspense>
           )}
+          {current?.kind === "systems" && (
+            <Suspense fallback={<p className="muted pad">Loading the diagram…</p>}>
+              <SystemsView />
+            </Suspense>
+          )}
           {current?.kind === "doc" && <DocTab name={current.name} />}
           {current?.kind === "review" && <ReviewTab git={git?.status ?? null} writable={git?.writable ?? false} onChanged={refreshGit} />}
           {current?.kind === "diff" && (
@@ -348,6 +364,22 @@ export function Workbench() {
           {current?.kind === "welcome" && (
             <div className="welcome-tab">
               {canSwitch && <button className="btn switch-folder" onClick={() => setBrowse(true)}>Open Folder…</button>}
+              {projects && (
+                <section className="projects-strip">
+                  <h2>{projects.projects.length} projects in this folder</h2>
+                  <p className="muted small">
+                    {projects.links.length > 0
+                      ? `${new Set(projects.links.map((l) => `${l.from}>${l.to}`)).size} connections found between them, each with the code that proves it.`
+                      : "No connections found between them yet."}
+                  </p>
+                  <ul className="plain">
+                    {projects.projects.map((p) => (
+                      <li key={p.path || "."}>{p.name}<span className="muted">{p.langs[0]?.lang ?? ""}</span></li>
+                    ))}
+                  </ul>
+                  <button className="btn primary" onClick={() => openTab({ kind: "systems" })}>Open the systems diagram</button>
+                </section>
+              )}
               <OverviewView ov={ov} onRescan={rescan} />
             </div>
           )}
@@ -363,7 +395,7 @@ export function Workbench() {
 
       <footer className="status" aria-label="Status">
         {canSwitch ? (
-          <button className="st-btn st-repo" onClick={() => setBrowse(true)} title="Open Folder (Ctrl+O)">{repo}</button>
+          <button className="st-btn st-repo" onClick={() => setSwitcher(true)} title="Switch folder (Ctrl+R)">{repo} ▾</button>
         ) : (
           <span className="st-repo">{repo}</span>
         )}
@@ -389,6 +421,10 @@ export function Workbench() {
       </footer>
 
       {browse && <FolderDialog onPick={pickFolder} onClose={() => setBrowse(false)} />}
+      {switcher && (
+        <RecentPicker recent={ws.recent} current={root} onPick={pickFolder} onClose={() => setSwitcher(false)}
+          onBrowse={() => { setSwitcher(false); setBrowse(true); }} />
+      )}
       {quick && <QuickOpen files={files} onClose={() => setQuick(false)} onPick={(p) => { setQuick(false); openFile(p); }} />}
     </div>
   );

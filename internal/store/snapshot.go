@@ -29,12 +29,14 @@ type ImportPair struct {
 
 // Snapshot is the whole knowledge base loaded into memory for document generation.
 type Snapshot struct {
-	Run       Run
-	Files     []FileInfo
-	Symbols   []SymbolInfo
-	Imports   []ImportPair
-	External  map[string]int // external module → number of importing files
-	Manifests map[string][]string
+	Run      Run
+	Files    []FileInfo
+	Symbols  []SymbolInfo
+	Imports  []ImportPair
+	External map[string]int // external module → number of importing files
+	// ExternalImports lists each external import (To is "<ecosystem>:<module>").
+	ExternalImports []ImportPair
+	Manifests       map[string][]string
 }
 
 // LoadSnapshot reads everything the docs engine needs in a handful of queries.
@@ -99,6 +101,7 @@ func (s *Store) LoadSnapshot() (*Snapshot, error) {
 			if strings.HasPrefix(name, "unresolved:") || scan.IsStdlib(name) {
 				continue
 			}
+			snap.ExternalImports = append(snap.ExternalImports, ImportPair{from, name, line})
 			if k := [2]string{from, name}; !extSeen[k] {
 				extSeen[k] = true
 				snap.External[name]++

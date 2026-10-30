@@ -30,6 +30,7 @@ import (
 	"github.com/kuli-dev/kulidev/internal/git"
 	"github.com/kuli-dev/kulidev/internal/scan"
 	"github.com/kuli-dev/kulidev/internal/store"
+	"github.com/kuli-dev/kulidev/internal/systems"
 	"github.com/kuli-dev/kulidev/internal/term"
 
 	"github.com/coder/websocket"
@@ -57,6 +58,10 @@ type Server struct {
 	terms     *term.Manager   // nil when terminals are disabled
 	auth      *auth.Store     // nil when no pairing is required (local use)
 	secure    bool            // served over TLS: cookies get the Secure flag
+	sysMu     sync.Mutex
+	sys       *systems.Map
+	sysFor    *store.Snapshot
+
 	rescanMu  sync.Mutex
 	rescanDue *time.Timer
 }
@@ -104,6 +109,7 @@ func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/overview", s.overview)
 	mux.HandleFunc("GET /api/graph", s.graph)
+	mux.HandleFunc("GET /api/systems", s.systemsMap)
 	mux.HandleFunc("GET /api/component", s.component)
 	mux.HandleFunc("GET /api/search", s.search)
 	mux.HandleFunc("GET /api/tree", s.tree)
@@ -290,6 +296,21 @@ type edgeJSON struct {
 	From string `json:"from"`
 	To   string `json:"to"`
 	N    int    `json:"n"`
+}
+
+// systemsMap returns the projects in the folder and how they relate, computed once per
+// scan.
+func (s *Server) systemsMap(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	snap := s.snap
+	s.mu.RUnlock()
+	s.sysMu.Lock()
+	defer s.sysMu.Unlock()
+	if s.sysFor != snap || s.sys == nil {
+		m := systems.Build(s.root, snap)
+		s.sys, s.sysFor = &m, snap
+	}
+	writeJSON(w, s.sys)
 }
 
 func (s *Server) graph(w http.ResponseWriter, r *http.Request) {

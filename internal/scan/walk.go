@@ -3,6 +3,7 @@ package scan
 import (
 	"bytes"
 	"io/fs"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
@@ -28,7 +29,8 @@ func skipped(rel string) bool {
 }
 
 // listFiles returns slash-separated paths relative to root. Inside a git work tree it
-// honours .gitignore via `git ls-files`; otherwise it walks the directory.
+// honours .gitignore via `git ls-files`; otherwise it walks the directory, and each
+// repository found inside (a folder of several repos) is listed by its own git.
 func listFiles(root string) ([]string, error) {
 	if files, ok := gitFiles(root); ok {
 		return files, nil
@@ -41,6 +43,17 @@ func listFiles(root string) ([]string, error) {
 		if d.IsDir() {
 			if p != root && skipDirs[d.Name()] {
 				return filepath.SkipDir
+			}
+			if p != root {
+				if _, err := os.Stat(filepath.Join(p, ".git")); err == nil {
+					if files, ok := gitFiles(p); ok {
+						rel, _ := filepath.Rel(root, p)
+						for _, f := range files {
+							out = append(out, path.Join(filepath.ToSlash(rel), f))
+						}
+						return filepath.SkipDir
+					}
+				}
 			}
 			return nil
 		}

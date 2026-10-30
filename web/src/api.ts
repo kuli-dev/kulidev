@@ -45,6 +45,14 @@ export type Device = { id: string; name: string; created: string; lastSeen: stri
 export type GitChange = { path: string; origPath?: string; index: string; worktree: string; conflict?: boolean };
 export type GitStatus = { git: boolean; branch: string; upstream?: string; ahead: number; behind: number; initial: boolean; changes: GitChange[] };
 
+export type SysProject = {
+  path: string; name: string; git: boolean; markers: string[]; packages: string[];
+  files: number; lines: number; langs: { lang: string; lines: number }[];
+};
+export type SysEvidence = { path: string; line: number; text: string };
+export type SysLink = { from: string; to: string; kind: "imports" | "depends on" | "configures"; count: number; evidence: SysEvidence[] };
+export type SystemsMap = { projects: SysProject[]; links: SysLink[] };
+
 export type RecentFolder = { path: string; name: string; opened: string; exists: boolean };
 export type OpenJob = {
   path: string; name: string; phase: "listing" | "reading" | "saving" | "done" | "error";
@@ -120,6 +128,7 @@ export const api = {
   git: (op: "stage" | "unstage" | "discard" | "commit" | "switch" | "fetch" | "pull" | "push",
     body: { paths?: string[]; message?: string; untracked?: boolean; branch?: string; create?: boolean }) =>
     call<{ ok: boolean; commit?: string }>(`api/git/${op}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  systems: () => call<SystemsMap>("api/systems"),
   workspace: () => call<WorkspaceInfo>("api/workspace"),
   fsList: (path: string) => call<DirList>(`api/fs/list?path=${q(path)}`),
   openWorkspace: (path: string) =>

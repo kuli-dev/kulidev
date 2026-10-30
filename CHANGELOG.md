@@ -9,6 +9,13 @@
   Local only — remote and paired devices stay on the folder they were given.
 - Opening a folder shows the full workbench straight away with a progress bar (files
   read of total); a folder opened before is usable at once while it catches up.
+- **Systems**: open a folder that holds several repositories (or a monorepo's apps) and
+  KuliDev finds the projects and draws how they connect: code imports (including a
+  package another project provides), declared dependencies, and deploy/config files that
+  refer to another project (compose services, Kubernetes, env URLs). Every arrow opens
+  the file:line evidence. Nested repositories are listed with their own .gitignore.
+- **Switch folders** with Ctrl+R or the folder name in the status bar: recent folders,
+  filtered as you type.
 - Windows: no more console windows flashing up when KuliDev runs git.
 - `kuli serve` without `-C` opens the current folder if it was scanned, otherwise the
   folder picker; opening a folder scans it (incrementally after the first time).
