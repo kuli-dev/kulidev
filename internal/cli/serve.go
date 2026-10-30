@@ -80,18 +80,25 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 					"--tls-cert/--tls-key, or --insecure-http if the network is already encrypted (Tailscale, WireGuard, SSH tunnel)")
 			}
 
-			st, err := o.openStore()
-			if err != nil {
-				return err
+			// Which folder: -C, else the current folder when it was scanned before, else
+			// none — the browser then shows "Open folder" (local use only).
+			var root, dir string
+			if f := cmd.Flag("repo"); f != nil && f.Changed {
+				if root, err = filepath.Abs(o.repo); err != nil {
+					return err
+				}
+			} else if cwd, _ := os.Getwd(); hasKnowledge(cwd) {
+				root = cwd
 			}
-			defer st.Close()
-			root, err := filepath.Abs(o.repo)
-			if err != nil {
-				return err
+			if root == "" && remote {
+				return errors.New("remote access serves one folder: add -C <repo>")
 			}
-			dir, err := o.resolvedDataDir()
-			if err != nil {
-				return err
+			if root != "" {
+				if o.dataDir != "" {
+					dir, _ = filepath.Abs(o.dataDir)
+				} else {
+					dir = filepath.Join(root, ".kulidev")
+				}
 			}
 			var model docs.Chatter
 			if c, err := lf.client(); err == nil {
@@ -102,9 +109,13 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 			}
 
 			// Off the loopback interface every device must pair; locally it's optional.
+			stateDir := dir
+			if stateDir == "" {
+				stateDir = userStateDir()
+			}
 			var devices *auth.Store
 			if remote || forceAuth {
-				if devices, err = auth.Open(filepath.Join(dir, "devices.json")); err != nil {
+				if devices, err = auth.Open(filepath.Join(stateDir, "devices.json")); err != nil {
 					return err
 				}
 			}
@@ -113,7 +124,7 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 				addrs = []string{host}
 			}
 			if selfSigned {
-				if tlsCert, tlsKey, err = auth.SelfSignedCert(filepath.Join(dir, "tls"), addrs); err != nil {
+				if tlsCert, tlsKey, err = auth.SelfSignedCert(filepath.Join(stateDir, "tls"), addrs); err != nil {
 					return err
 				}
 			}
@@ -129,11 +140,18 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 				opts.AllowHosts = []string{pub.Hostname()}
 				opts.TLS = true // the tunnel terminates TLS: cookies must be Secure
 			}
-			srv, err := server.New(root, dir, st, model, web.FS(), opts)
-			if err != nil {
-				return err
+			hub := server.NewHost(server.HostOptions{
+				UI: web.FS(), LLM: model, Options: opts, RecentFile: filepath.Join(userStateDir(), "recent.json"),
+				CanOpen: !remote && devices == nil, // browsing folders is for the local user only
+			})
+			defer hub.Close()
+			if root != "" {
+				sum, err := hub.Open(root, dir)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(os.Stderr, "kuli: %s (%s)\n", filepath.Base(root), sum)
 			}
-			defer srv.Close()
 
 			network := "tcp"
 			if host == "0.0.0.0" {
@@ -150,7 +168,11 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 				scheme = "https"
 			}
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "KuliDev is serving %s on %s://%s\n", filepath.Base(root), scheme, ln.Addr())
+			if root == "" {
+				fmt.Fprintf(out, "KuliDev is running on %s://%s — open it and choose a folder\n", scheme, ln.Addr())
+			} else {
+				fmt.Fprintf(out, "KuliDev is serving %s on %s://%s\n", filepath.Base(root), scheme, ln.Addr())
+			}
 			if remote && !terminals && !noTerminal && !readOnly {
 				fmt.Fprintln(os.Stderr, "kuli: terminals are off for remote access; add --allow-remote-terminal to give paired devices a shell")
 			}
@@ -161,7 +183,7 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 				printPairing(out, devices, scheme, addrs, port, loopback)
 			}
 
-			hs := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
+			hs := &http.Server{Handler: hub.Handler(), ReadHeaderTimeout: 10 * time.Second}
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM) // also systemd/docker stop
 			defer stop()
 			go func() {
@@ -231,4 +253,23 @@ func printPairingURLs(out io.Writer, devices *auth.Store, bases []string) {
 		fmt.Fprintf(out, "\nScan with your phone:\n%s", q)
 	}
 	fmt.Fprintln(out, "Paired devices can invite more from the Devices view.")
+}
+
+// hasKnowledge reports whether dir was scanned before (it has a knowledge base).
+func hasKnowledge(dir string) bool {
+	_, err := os.Stat(filepath.Join(dir, ".kulidev", "kulidev.db"))
+	return err == nil
+}
+
+// UserStateDir is exported for the desktop app.
+func UserStateDir() string { return userStateDir() }
+
+// userStateDir holds per-user state that isn't tied to one repository (recent folders,
+// pairing for a folder-less server): ~/.config/kulidev, %AppData%\kulidev, …
+func userStateDir() string {
+	if d, err := os.UserConfigDir(); err == nil {
+		return filepath.Join(d, "kulidev")
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".kulidev-user")
 }

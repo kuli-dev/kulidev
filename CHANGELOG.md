@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Desktop app** for Windows and macOS: `KuliDev.exe` opens the workbench in a native
+  window (WebView2 / WebKit) — no browser, no commands.
+- **Open folder**: start without a repository and pick one (recent folders, a folder browser
+  that marks repositories, drive letters on Windows); switch folders from the workbench.
+  Local only — remote and paired devices stay on the folder they were given.
+- `kuli serve` without `-C` opens the current folder if it was scanned, otherwise the
+  folder picker; opening a folder scans it (incrementally after the first time).
+
 ## 0.2.0
 
 - **Java and PHP**: definitions with Javadoc/PHPDoc; Java imports resolved by package path

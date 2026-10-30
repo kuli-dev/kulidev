@@ -45,6 +45,10 @@ export type Device = { id: string; name: string; created: string; lastSeen: stri
 export type GitChange = { path: string; origPath?: string; index: string; worktree: string; conflict?: boolean };
 export type GitStatus = { git: boolean; branch: string; upstream?: string; ahead: number; behind: number; initial: boolean; changes: GitChange[] };
 
+export type RecentFolder = { path: string; name: string; opened: string; exists: boolean };
+export type WorkspaceInfo = { open: boolean; root: string; name: string; canOpen: boolean; recent: RecentFolder[] | null; os: string };
+export type DirList = { path: string; parent: string; home: string; isRepo: boolean; dirs: { name: string; path: string; isRepo: boolean }[]; drives?: string[] };
+
 export type AskResult = { answer: string; keywords: string[]; citations: number; removed: number; coverage: number; hits: number };
 
 export class ApiError extends Error {
@@ -60,6 +64,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const body = await res.json().catch(() => ({}));
   // Remote workspaces: an unpaired (or revoked) device is sent to the pairing screen.
   if (res.status === 401 && body.auth) dispatchEvent(new Event("kuli-auth-required"));
+  if (res.status === 409 && body.noWorkspace) dispatchEvent(new Event("kuli-no-workspace"));
   if (!res.ok) throw new ApiError(body.error || `${res.status} ${res.statusText}`, res.status, body);
   return body as T;
 }
@@ -109,5 +114,12 @@ export const api = {
   git: (op: "stage" | "unstage" | "discard" | "commit" | "switch" | "fetch" | "pull" | "push",
     body: { paths?: string[]; message?: string; untracked?: boolean; branch?: string; create?: boolean }) =>
     call<{ ok: boolean; commit?: string }>(`api/git/${op}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+  workspace: () => call<WorkspaceInfo>("api/workspace"),
+  fsList: (path: string) => call<DirList>(`api/fs/list?path=${q(path)}`),
+  openWorkspace: (path: string) =>
+    call<{ root: string; files: number; ms: number; full: boolean }>("api/workspace/open", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ path }),
+    }),
+  closeWorkspace: () => call<{ ok: boolean }>("api/workspace/close", { method: "POST" }),
   rescan: () => call<{ files: number; ms: number }>("api/rescan", { method: "POST" }),
 };

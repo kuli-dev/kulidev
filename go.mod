@@ -14,6 +14,7 @@ require (
 	github.com/tree-sitter/tree-sitter-php v0.25.1
 	github.com/tree-sitter/tree-sitter-python v0.25.0
 	github.com/tree-sitter/tree-sitter-typescript v0.23.2
+	github.com/webview/webview_go v0.0.0-20240831120633-6173450d4dd6
 	modernc.org/sqlite v1.61.0
 	rsc.io/qr v0.2.0
 )

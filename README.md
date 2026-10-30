@@ -16,6 +16,13 @@ Early. **v0.1 is the knowledge engine**: scan, search and dependency queries fro
 an MCP server so coding agents can use the same knowledge, DocsMana handover docs and
 `kuli ask` for cited answers, and a web UI (`kuli serve`). What's next is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
+## Desktop app
+
+On Windows and macOS, double-click **KuliDev** (`KuliDev.exe` / `KuliDev` in the release
+archive): the workbench opens in its own window — pick a folder, recent ones are remembered.
+It uses the system web engine (WebView2 on Windows, WebKit on macOS), so it stays small.
+`kuli serve` without a folder gives the same "Open folder" screen in your browser.
+
 ## Install
 
 ```sh

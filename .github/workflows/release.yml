@@ -18,7 +18,7 @@ jobs:
           - { os: ubuntu-24.04-arm, goos: linux, goarch: arm64 }
           - { os: macos-latest, goos: darwin, goarch: arm64 }
           # Intel Macs: cross-compiled on Apple Silicon (clang targets x86_64 natively).
-          - { os: macos-latest, goos: darwin, goarch: amd64, cc: "clang -arch x86_64" }
+          - { os: macos-latest, goos: darwin, goarch: amd64, cc: "clang -arch x86_64", cxx: "clang++ -arch x86_64" }
           - { os: windows-latest, goos: windows, goarch: amd64 }
     runs-on: ${{ matrix.os }}
     steps:
@@ -33,12 +33,20 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CC: ${{ matrix.cc }}
+          CXX: ${{ matrix.cxx }}
         run: |
           [ -n "$CC" ] || unset CC
+          [ -n "$CXX" ] || unset CXX
           ext=""; [ "$GOOS" = windows ] && ext=".exe"
           mkdir -p out/pkg
           go build -trimpath -ldflags "-s -w -X github.com/kuli-dev/kulidev/internal/cli.Version=${GITHUB_REF_NAME}" \
             -o "out/pkg/kuli${ext}" ./cmd/kuli
+          # The desktop app (native window) for Windows and macOS.
+          if [ "$GOOS" = windows ]; then
+            go build -trimpath -ldflags "-s -w -H=windowsgui" -o out/pkg/KuliDev.exe ./cmd/kulidev-desktop
+          elif [ "$GOOS" = darwin ]; then
+            go build -trimpath -ldflags "-s -w" -o out/pkg/KuliDev ./cmd/kulidev-desktop
+          fi
           cp LICENSE README.md CHANGELOG.md out/pkg/
           name="kuli_${GITHUB_REF_NAME#v}_${GOOS}_${GOARCH}"
           cd out/pkg

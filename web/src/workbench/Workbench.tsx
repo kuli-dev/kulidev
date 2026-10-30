@@ -107,6 +107,16 @@ export function Workbench() {
   }
   const [scan, setScan] = useState<"idle" | "busy" | string>("idle");
   const [dirty, setDirty] = useState<Set<string>>(() => new Set());
+  const [canSwitch, setCanSwitch] = useState(false);
+  useEffect(() => {
+    api.workspace().then((w) => setCanSwitch(w.canOpen), () => {});
+  }, []);
+  async function openAnotherFolder() {
+    if (dirty.size > 0 && !confirm(`${dirty.size} file(s) have unsaved changes that will be lost. Open another folder anyway?`)) return;
+    await api.closeWorkspace().catch(() => {});
+    location.hash = "#/";
+    location.reload();
+  }
   const markDirty = useCallback((path: string, d: boolean) => {
     setDirty((cur) => {
       if (cur.has(path) === d) return cur;
@@ -316,7 +326,12 @@ export function Workbench() {
               <DiffTab key={`${current.id}@${gitVersion}`} path={current.path} staged={current.staged} narrow={narrow} />
             </Suspense>
           )}
-          {current?.kind === "welcome" && <div className="welcome-tab"><OverviewView ov={ov} onRescan={rescan} /></div>}
+          {current?.kind === "welcome" && (
+            <div className="welcome-tab">
+              {canSwitch && <button className="btn switch-folder" onClick={openAnotherFolder}>Open another folder</button>}
+              <OverviewView ov={ov} onRescan={rescan} />
+            </div>
+          )}
         </div>
         {termOpen && ov.data?.terminals && (
           <Suspense fallback={<p className="muted pad">Loading the terminal…</p>}>
@@ -328,7 +343,11 @@ export function Workbench() {
       {chat && <Chat enabled={ov.data?.llm ?? false} model={ov.data?.model} onClose={() => setChat(false)} />}
 
       <footer className="status" aria-label="Status">
-        <span className="st-repo">{repo}</span>
+        {canSwitch ? (
+          <button className="st-btn st-repo" onClick={openAnotherFolder} title="Open another folder">{repo}</button>
+        ) : (
+          <span className="st-repo">{repo}</span>
+        )}
         {ov.data && <span className="st-wide">{ov.data.commit ? ov.data.commit.slice(0, 8) : "no commit"}</span>}
         {ov.data?.stale && <span className="st-warn">{narrow ? "Stale" : "New commits since scan"}</span>}
         <button className="st-btn" onClick={rescan} disabled={scan === "busy"}>{scan === "busy" ? "Scanning…" : "Rescan"}</button>
