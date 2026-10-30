@@ -1,9 +1,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -559,5 +561,52 @@ func TestGitAPI(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("read-only commit = %d", resp.StatusCode)
+	}
+}
+
+func TestRawImagesAndSymlinks(t *testing.T) {
+	ts, root := setup(t)
+	png := []byte("\x89PNG\r\n\x1a\nfake")
+	os.WriteFile(filepath.Join(root, "web/logo.png"), png, 0o644)
+	os.WriteFile(filepath.Join(root, "web/bad.svg"), []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`), 0o644)
+	linked := runtime.GOOS != "windows" && os.Symlink(filepath.Join(filepath.Dir(root), "secret.txt"), filepath.Join(root, "web/leak.png")) == nil
+	req, _ := http.NewRequest("POST", ts.URL+"/api/rescan", nil)
+	req.Header.Set("X-Kuli-Request", "1")
+	if resp, err := http.DefaultClient.Do(req); err == nil {
+		resp.Body.Close()
+	}
+
+	resp, err := http.Get(ts.URL + "/api/raw?path=web/logo.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if resp.StatusCode != 200 || resp.Header.Get("Content-Type") != "image/png" || !bytes.Equal(b, png) {
+		t.Errorf("png = %d %q %q", resp.StatusCode, resp.Header.Get("Content-Type"), b)
+	}
+	resp, _ = http.Get(ts.URL + "/api/raw?path=web/bad.svg")
+	resp.Body.Close()
+	if !strings.Contains(resp.Header.Get("Content-Security-Policy"), "sandbox") {
+		t.Errorf("svg not sandboxed: %v", resp.Header)
+	}
+	if code := get(t, ts, "/api/raw?path=web/app.ts", nil); code != http.StatusUnsupportedMediaType {
+		t.Errorf("non-image = %d", code)
+	}
+	if code := get(t, ts, "/api/raw?path=../secret.png", nil); code != http.StatusNotFound {
+		t.Errorf("traversal = %d", code)
+	}
+	if linked {
+		if code := get(t, ts, "/api/raw?path=web/leak.png", nil); code == 200 {
+			t.Errorf("symlink out of the folder was served")
+		}
+		// Git lists symlinks, so the scan may record one: the path check must refuse it.
+		srv := &Server{root: root}
+		if _, ok := srv.inside("web/leak.png"); ok {
+			t.Error("inside() accepted a link that leaves the folder")
+		}
+		if _, ok := srv.inside("web/logo.png"); !ok {
+			t.Error("inside() refused a plain file")
+		}
 	}
 }

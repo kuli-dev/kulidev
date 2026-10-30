@@ -36,6 +36,15 @@ const md = new Marked({
       }
       return `<pre class="code-block"><code>${esc(text)}</code></pre>`;
     },
+    image({ href: h, text, title }) {
+      let src = h ?? "";
+      // Images beside the previewed file come from the folder (scanned files only).
+      if (linkBase !== null && src && !/^[a-z]+:|^\/\/|^#/i.test(src)) {
+        const rel = src.startsWith("/") ? src.slice(1) : resolve(linkBase, decodeURI(src.split(/[?#]/)[0]));
+        src = `api/raw?path=${encodeURIComponent(rel)}`;
+      }
+      return `<img src="${esc(src)}" alt="${esc(text)}"${title ? ` title="${esc(title)}"` : ""} loading="lazy">`;
+    },
     link({ href: h, text }) {
       let target = h ?? "";
       if (linkBase !== null && target && !/^[a-z]+:|^#|^\//i.test(target)) {

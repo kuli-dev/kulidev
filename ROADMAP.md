@@ -4,7 +4,6 @@ What is planned, roughly in order. Done items move to the CHANGELOG.
 
 ## Next
 
-- **Diagram editor**: subgraphs on the canvas; relative images in the Markdown preview.
 - **Navigation** from the design system (knowledge first: Overview, Architecture,
   Repositories, Documentation, …), pending the owner's go-ahead.
 - **One title bar** in the desktop app (custom frameless window, like VS Code).

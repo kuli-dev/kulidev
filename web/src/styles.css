@@ -725,3 +725,12 @@ figure.mmd { margin: 1.2rem 0; padding: 12px; border: 1px solid var(--line); bor
   .monaco-host.with-bar.view-split { right: 0; bottom: 50%; }
   .md-preview.view-split { left: 0; top: 50%; border-left: 0; border-top: 1px solid var(--line); }
 }
+
+/* Subgraphs on the diagram canvas */
+.react-flow__node-group { background: none !important; border: 0 !important; padding: 0 !important; box-shadow: none !important; border-radius: 0; }
+.fc-group { position: relative; border: 1.5px dashed var(--steel); border-radius: 8px; background: color-mix(in srgb, var(--surface) 55%, transparent); }
+.fc-group.is-sel { border-color: var(--brand); border-style: solid; box-shadow: 0 0 0 2px var(--brand-wash); }
+.fc-group-title { position: absolute; top: 5px; left: 10px; right: 10px; font-size: 12px; font-weight: 600; color: var(--steel); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-group.is-sel .fc-group-title { color: var(--ink); }
+.fc-group:hover .fc-handle, .fc-group.is-sel .fc-handle { opacity: 1; }
+.fc-groupchip .fc-bg { border-style: dashed; border-radius: 6px; background: none; }

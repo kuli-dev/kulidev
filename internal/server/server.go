@@ -119,6 +119,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/definition", s.definition)
 	mux.HandleFunc("GET /api/file", s.file)
 	mux.HandleFunc("PUT /api/file", s.saveFile)
+	mux.HandleFunc("GET /api/raw", s.raw)
 	mux.HandleFunc("GET /api/deps", s.deps)
 	mux.HandleFunc("GET /api/broken", s.broken)
 	mux.HandleFunc("GET /api/docs", s.docsList)
@@ -440,8 +441,8 @@ func (s *Server) file(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	full := filepath.Join(s.root, filepath.FromSlash(fi.Path))
-	if rel, err := filepath.Rel(s.root, full); err != nil || strings.HasPrefix(rel, "..") {
+	full, ok := s.inside(fi.Path)
+	if !ok {
 		fail(w, http.StatusForbidden, "outside repository")
 		return
 	}
@@ -464,6 +465,70 @@ func (s *Server) file(w http.ResponseWriter, r *http.Request) {
 	_, imports, _ := s.store.Deps(fi.Path, false)
 	resp["symbols"], resp["importers"], resp["imports"] = nonNil(syms), nonNil(importers), nonNil(imports)
 	writeJSON(w, resp)
+}
+
+// inside resolves a scanned path, following symlinks, and reports whether it stays in
+// the folder: a link inside the repository must not reach files outside it.
+func (s *Server) inside(p string) (string, bool) {
+	full := filepath.Join(s.root, filepath.FromSlash(p))
+	real, err := filepath.EvalSymlinks(full)
+	if err != nil {
+		return full, within(s.root, full) // missing: the caller reports it, nothing is read
+	}
+	root, err := filepath.EvalSymlinks(s.root)
+	if err != nil {
+		return "", false
+	}
+	return real, within(root, real)
+}
+
+func within(root, p string) bool {
+	rel, err := filepath.Rel(root, p)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}
+
+var imageTypes = map[string]string{
+	".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif", ".webp": "image/webp",
+	".svg": "image/svg+xml", ".ico": "image/x-icon", ".bmp": "image/bmp", ".avif": "image/avif",
+}
+
+// raw serves an image from the folder, for the Markdown preview. Only scanned files,
+// only image types; SVGs are sandboxed so a script in one cannot run.
+func (s *Server) raw(w http.ResponseWriter, r *http.Request) {
+	p := r.URL.Query().Get("path")
+	ctype, ok := imageTypes[strings.ToLower(path.Ext(p))]
+	if !ok {
+		fail(w, http.StatusUnsupportedMediaType, "only images are served")
+		return
+	}
+	if _, err := s.store.File(p); err != nil {
+		fail(w, http.StatusNotFound, "file not in the knowledge base")
+		return
+	}
+	full, ok := s.inside(p)
+	if !ok {
+		fail(w, http.StatusForbidden, "outside repository")
+		return
+	}
+	info, err := os.Stat(full)
+	if err != nil || info.IsDir() {
+		fail(w, http.StatusNotFound, "file no longer on disk (rescan)")
+		return
+	}
+	if info.Size() > 20<<20 {
+		fail(w, http.StatusRequestEntityTooLarge, "image too large")
+		return
+	}
+	f, err := os.Open(full)
+	if err != nil {
+		fail(w, http.StatusNotFound, err.Error())
+		return
+	}
+	defer f.Close()
+	w.Header().Set("Content-Type", ctype)
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; sandbox")
+	http.ServeContent(w, r, "", info.ModTime(), f)
 }
 
 func (s *Server) deps(w http.ResponseWriter, r *http.Request) {

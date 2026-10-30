@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Subgraphs in the diagram editor**: groups are boxes around their members. Drag a
+  node into or out of a box to change where it belongs, drag a box to move it with its
+  contents, add one from the palette or wrap the selection (Group selection); title,
+  direction and nesting in the side panel; Delete ungroups and keeps the nodes. "A & B
+  --> C" chains and edges to a subgraph are read too.
+- **Images in the Markdown preview**: relative image paths show the image from the
+  folder (image types only; SVGs sandboxed).
+- File reads refuse symlinks that lead outside the folder.
+
 - **Terminal, agents and Pulse on Windows** through ConPTY (Windows 10 1809+). The
   terminal opens PowerShell (pwsh when installed); npm-installed agents such as Claude
   Code and Codex start through their .cmd launchers. `KuliDev.exe mcp` serves the
