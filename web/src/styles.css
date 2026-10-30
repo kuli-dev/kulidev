@@ -344,6 +344,11 @@ ul.counts li { display: flex; justify-content: space-between; gap: 1rem; padding
   .wb, .wb.with-chat { grid-template-columns: 48px 0 minmax(0, 1fr) 0; }
   .wb:not(.no-side) .side { position: fixed; left: 48px; top: 0; bottom: 24px; width: min(300px, 80vw); z-index: 20; box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3); }
   .wb.with-chat .chat { position: fixed; right: 0; top: 0; bottom: 24px; width: min(420px, 100vw); z-index: 30; }
+  .side-backdrop { position: fixed; inset: 0 0 24px 48px; z-index: 15; background: rgba(0, 0, 0, 0.35); }
+  .st-wide { display: none; }
+  .status { gap: 10px; }
+  .tab { max-width: 160px; }
+  .crumbs { display: none; }
   .page, .doc-tab { padding: 1.2rem 1rem 3rem; }
   .map-body { grid-template-columns: 1fr; }
   .panel { width: auto; max-width: none; border-left: 0; border-top: 1px solid var(--line); }

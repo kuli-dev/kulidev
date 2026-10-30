@@ -42,7 +42,9 @@ export function Workbench() {
   const storeKey = `kuli.tabs.${ov.data?.root ?? ""}`;
 
   const [{ tabs, active }, setState] = useState(() => loadTabs("kuli.tabs.pending"));
-  const [view, setView] = useState<View | null>("explorer");
+  // Phones: the side bar is an overlay, so it starts closed and gets out of the way.
+  const narrow = useNarrow();
+  const [view, setView] = useState<View | null>(() => (matchMedia(NARROW).matches ? null : "explorer"));
   const [searchQ, setSearchQ] = useState("");
   const [chat, setChat] = useState(false);
   const [quick, setQuick] = useState(false);
@@ -103,7 +105,10 @@ export function Workbench() {
     });
   }, []);
 
-  const openFile = useCallback((path: string, from?: number, to?: number) => openTab({ kind: "file", path, from, to }), [openTab]);
+  const openFile = useCallback((path: string, from?: number, to?: number) => {
+    openTab({ kind: "file", path, from, to });
+    if (matchMedia(NARROW).matches) setView(null);
+  }, [openTab]);
 
   const closeTab = (id: string) => {
     const t = tabs.find((x) => x.id === id);
@@ -197,11 +202,12 @@ export function Workbench() {
         </button>
       </nav>
 
+      {view && narrow && <div className="side-backdrop" onClick={() => setView(null)} aria-hidden="true" />}
       {view && (
         <aside className="side" aria-label="Side bar">
           {view === "explorer" && <Explorer files={files} repo={repo} active={activePath} onOpen={openFile} />}
           {view === "search" && <SearchPane initial={searchQ} onOpen={openFile} />}
-          {view === "docs" && <DocsPane onOpenDoc={(name) => openTab({ kind: "doc", name })} />}
+          {view === "docs" && <DocsPane onOpenDoc={(name) => { openTab({ kind: "doc", name }); if (narrow) setView(null); }} />}
           {view === "issues" && <IssuesPane onOpen={openFile} />}
           {view === "agents" && <AgentsPane onStart={startAgent} />}
           {view === "devices" && <DevicesPane />}
@@ -254,24 +260,37 @@ export function Workbench() {
 
       <footer className="status" aria-label="Status">
         <span className="st-repo">{repo}</span>
-        {ov.data && <span>{ov.data.commit ? ov.data.commit.slice(0, 8) : "no commit"}</span>}
-        {ov.data?.stale && <span className="st-warn">New commits since scan</span>}
+        {ov.data && <span className="st-wide">{ov.data.commit ? ov.data.commit.slice(0, 8) : "no commit"}</span>}
+        {ov.data?.stale && <span className="st-warn">{narrow ? "Stale" : "New commits since scan"}</span>}
         <button className="st-btn" onClick={rescan} disabled={scan === "busy"}>{scan === "busy" ? "Scanning…" : "Rescan"}</button>
         {scan !== "idle" && scan !== "busy" && <span>{scan}</span>}
         <span className="st-gap" />
-        {cursor && <span>Ln {cursor.line}, Col {cursor.col}</span>}
-        {cursor && <span>{cursor.lang}</span>}
-        <span>{ov.data?.llm ? `Model: ${ov.data.model}` : "No model"}</span>
+        {cursor && <span className="st-wide">Ln {cursor.line}, Col {cursor.col}</span>}
+        {cursor && <span className="st-wide">{cursor.lang}</span>}
+        <span className="st-wide">{ov.data?.llm ? `Model: ${ov.data.model}` : "No model"}</span>
         {dirty.size > 0 && <span className="st-warn">{dirty.size} unsaved</span>}
         {ov.data?.terminals && (
           <button className="st-btn" onClick={() => setTermOpen((o) => !o)} title="Toggle terminal (Ctrl+`)">Terminal</button>
         )}
-        <span>{ov.data?.readOnly ? "Read-only" : "Ctrl+S saves"}</span>
+        <span className="st-wide">{ov.data?.readOnly ? "Read-only" : "Ctrl+S saves"}</span>
       </footer>
 
       {quick && <QuickOpen files={files} onClose={() => setQuick(false)} onPick={(p) => { setQuick(false); openFile(p); }} />}
     </div>
   );
+}
+
+const NARROW = "(max-width: 900px)";
+
+function useNarrow(): boolean {
+  const [narrow, setNarrow] = useState(() => matchMedia(NARROW).matches);
+  useEffect(() => {
+    const mq = matchMedia(NARROW);
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  return narrow;
 }
 
 function EmptyEditor({ onQuick }: { onQuick: () => void }) {
