@@ -4,10 +4,10 @@ What is planned, roughly in order. Done items move to the CHANGELOG.
 
 ## Next
 
-- **Release v0.3.0**: the desktop app (KuliDev.exe / macOS KuliDev) in the release
-  archives, once tested on Windows.
-- **Windows terminal and agents**: ConPTY support, so the terminal, Pulse and agents work
-  on Windows without WSL.
+- **Diagram editor**: subgraphs on the canvas; relative images in the Markdown preview.
+- **Navigation** from the design system (knowledge first: Overview, Architecture,
+  Repositories, Documentation, …), pending the owner's go-ahead.
+- **One title bar** in the desktop app (custom frameless window, like VS Code).
 - **Code signing** for the Windows and macOS apps (no SmartScreen / Gatekeeper warning).
 - **Systems**: gRPC/proto and message queues (topics, queue names) as links; GraphQL;
   routes mounted with prefixes set in another file (include_router, app.use).
