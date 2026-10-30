@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -458,5 +459,83 @@ func TestTunnelHostNeedsPairing(t *testing.T) {
 	}
 	if code := req("evil.ngrok-free.app"); code != 403 {
 		t.Errorf("other host = %d, want 403", code)
+	}
+}
+
+func TestGitAPI(t *testing.T) {
+	ts, root := setup(t)
+	run := func(args ...string) {
+		cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t", "GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	run("init", "-q", "-b", "main")
+	run("config", "user.email", "t@t")
+	run("config", "user.name", "t")
+	run("add", "-A", "--", ".", ":!.kulidev")
+	run("commit", "-q", "-m", "init")
+	os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/shop\n\ngo 1.23\n"), 0o644)
+
+	var st struct {
+		Status struct {
+			Git     bool
+			Branch  string
+			Changes []struct{ Path, Index, Worktree string }
+		}
+		Writable bool
+	}
+	get(t, ts, "/api/git/status", &st)
+	found := false
+	for _, c := range st.Status.Changes {
+		if c.Path == "go.mod" && c.Worktree == "M" {
+			found = true
+		}
+	}
+	if !st.Status.Git || st.Status.Branch != "main" || !found || !st.Writable {
+		t.Fatalf("status = %+v", st)
+	}
+	var d struct{ Original, Modified string }
+	get(t, ts, "/api/git/diff?path=go.mod", &d)
+	if !strings.Contains(d.Modified, "go 1.23") || strings.Contains(d.Original, "go 1.23") {
+		t.Errorf("diff = %+v", d)
+	}
+	if code := get(t, ts, "/api/git/diff?path=../../etc/passwd", nil); code != 400 {
+		t.Errorf("traversal diff = %d", code)
+	}
+
+	post := func(op, body string) (int, map[string]any) {
+		req, _ := http.NewRequest("POST", ts.URL+"/api/git/"+op, strings.NewReader(body))
+		req.Header.Set("X-Kuli-Request", "1")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out map[string]any
+		json.NewDecoder(resp.Body).Decode(&out)
+		return resp.StatusCode, out
+	}
+	if code, out := post("stage", `{"paths":["go.mod"]}`); code != 200 {
+		t.Fatalf("stage = %d %v", code, out)
+	}
+	if code, out := post("commit", `{"message":"bump go"}`); code != 200 || out["commit"] == "" {
+		t.Fatalf("commit = %d %v", code, out)
+	}
+	if code, _ := post("stage", `{"paths":["--all"]}`); code != 400 {
+		t.Errorf("option as path = %d", code)
+	}
+	if code, _ := post("push", `{}`); code != 404 {
+		t.Errorf("unknown op = %d", code)
+	}
+
+	ro, _ := setupWith(t, Options{Loopback: true, ReadOnly: true})
+	req, _ := http.NewRequest("POST", ro.URL+"/api/git/commit", strings.NewReader(`{"message":"x"}`))
+	req.Header.Set("X-Kuli-Request", "1")
+	resp, _ := http.DefaultClient.Do(req)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Errorf("read-only commit = %d", resp.StatusCode)
 	}
 }

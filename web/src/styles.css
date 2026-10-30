@@ -185,6 +185,34 @@ ul.plain { list-style: none; padding: 0; margin: 0; }
 .keys li { display: flex; gap: 0.4rem; align-items: center; justify-content: flex-end; padding: 3px 0; }
 .keys li > :first-child { margin-right: auto; padding-right: 2rem; }
 
+/* Source control */
+.act { position: relative; }
+.act-badge {
+  position: absolute; right: 7px; bottom: 6px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px;
+  background: var(--safety); color: #1e2a2f; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center;
+}
+.branch { margin: 0 0 8px; color: var(--steel); }
+.commit-box { display: grid; gap: 6px; padding: 0 10px 10px; }
+.commit-box textarea {
+  font: inherit; resize: vertical; padding: 7px 9px; border: 1px solid var(--line); border-radius: 2px;
+  background: var(--concrete); color: var(--ink);
+}
+.commit-box textarea:focus { border-color: var(--ink); outline: none; }
+.git-head { display: flex; justify-content: space-between; align-items: center; }
+.link-btn { font: inherit; font-size: 12px; background: none; border: 0; color: var(--link); cursor: pointer; padding: 0; }
+.git-row { display: flex; align-items: center; padding-right: 8px; }
+.git-row .link-row { flex: 1; min-width: 0; gap: 6px; }
+.git-name { flex: none; }
+.git-dir { color: var(--steel); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.git-actions { display: none; }
+.git-row:hover .git-actions, .git-row:focus-within .git-actions { display: flex; }
+.git-actions .icon-btn { font-size: 16px; width: 24px; height: 24px; }
+.git-letter { width: 16px; text-align: center; font-size: 12px; font-weight: 700; flex: none; }
+.g-M { color: var(--lang-3); }
+.g-A, .g-U { color: var(--lang-2); }
+.g-D { color: var(--rust); }
+.g-R, .g-C { color: var(--lang-4); }
+
 /* Pairing & devices */
 .pair { min-height: 100%; display: grid; place-items: center; padding: 24px 16px; overflow: auto; }
 .pair-card { width: min(420px, 100%); display: grid; gap: 14px; }
@@ -346,6 +374,7 @@ ul.counts li { display: flex; justify-content: space-between; gap: 1rem; padding
   .wb.with-chat .chat { position: fixed; right: 0; top: 0; bottom: 24px; width: min(420px, 100vw); z-index: 30; }
   .side-backdrop { position: fixed; inset: 0 0 24px 48px; z-index: 15; background: rgba(0, 0, 0, 0.35); }
   .st-wide { display: none; }
+  .git-actions { display: flex; }
   .status { gap: 10px; }
   .tab { max-width: 160px; }
   .crumbs { display: none; }

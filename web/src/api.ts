@@ -39,6 +39,9 @@ export type AgentInfo = { id: string; name: string; installed: boolean; mcp: boo
 
 export type Device = { id: string; name: string; created: string; lastSeen: string };
 
+export type GitChange = { path: string; origPath?: string; index: string; worktree: string; conflict?: boolean };
+export type GitStatus = { git: boolean; branch: string; upstream?: string; ahead: number; behind: number; initial: boolean; changes: GitChange[] };
+
 export type AskResult = { answer: string; keywords: string[]; citations: number; removed: number; coverage: number; hits: number };
 
 export class ApiError extends Error {
@@ -92,5 +95,10 @@ export const api = {
   devices: () => call<{ required: boolean; current: string; devices: Device[] }>("api/devices"),
   newPairingCode: () => call<{ code: string; expiresIn: number }>("api/devices/code", { method: "POST" }),
   revokeDevice: (id: string) => call<{ ok: boolean }>(`api/devices/${q(id)}`, { method: "DELETE" }),
+  gitStatus: () => call<{ status: GitStatus; writable: boolean }>("api/git/status"),
+  gitDiff: (path: string, staged: boolean) =>
+    call<{ original: string; modified: string; binary: boolean }>(`api/git/diff?path=${q(path)}${staged ? "&staged=1" : ""}`),
+  git: (op: "stage" | "unstage" | "discard" | "commit", body: { paths?: string[]; message?: string; untracked?: boolean }) =>
+    call<{ ok: boolean; commit?: string }>(`api/git/${op}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   rescan: () => call<{ files: number; ms: number }>("api/rescan", { method: "POST" }),
 };

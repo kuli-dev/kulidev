@@ -41,10 +41,8 @@ func Open(dataDir string) (*Store, error) {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return nil, err
 	}
-	// Keep the database out of version control; generated docs may live alongside it.
-	gi := filepath.Join(dataDir, ".gitignore")
-	if _, err := os.Stat(gi); os.IsNotExist(err) {
-		_ = os.WriteFile(gi, []byte(DBFile+"*\n"), 0o644)
+	if err := writeGitignore(dataDir); err != nil {
+		return nil, err
 	}
 	db, err := sql.Open("sqlite", filepath.Join(dataDir, DBFile)+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	if err != nil {
@@ -69,6 +67,32 @@ func Open(dataDir string) (*Store, error) {
 		return nil, fmt.Errorf("apply schema: %w", err)
 	}
 	return &Store{DB: db}, nil
+}
+
+// gitignoreBody keeps local state out of version control: the database, paired devices
+// (session hashes), TLS keys and agent configs. Generated docs in knowledge/ stay
+// committable on purpose.
+const gitignoreBody = `# Managed by kuli — local state that must never be committed.
+kulidev.db*
+devices.json
+devices.json.tmp
+tls/
+agents/
+`
+
+// writeGitignore creates .kulidev/.gitignore, or rewrites it when an older kuli wrote
+// one that misses entries (it once covered only the database).
+func writeGitignore(dataDir string) error {
+	path := filepath.Join(dataDir, ".gitignore")
+	cur, err := os.ReadFile(path)
+	if err == nil && strings.Contains(string(cur), "tls/") && strings.Contains(string(cur), "devices.json") {
+		return nil
+	}
+	if err == nil && !strings.HasPrefix(string(cur), "# Managed by kuli") && string(cur) != DBFile+"*\n" {
+		// Someone customised it: append what's missing instead of overwriting.
+		return os.WriteFile(path, append(cur, []byte("\n"+gitignoreBody)...), 0o644)
+	}
+	return os.WriteFile(path, []byte(gitignoreBody), 0o644)
 }
 
 // OpenExisting opens the database only if a scan has already created it.

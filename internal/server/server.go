@@ -27,6 +27,7 @@ import (
 	"github.com/kuli-dev/kulidev/internal/ask"
 	"github.com/kuli-dev/kulidev/internal/auth"
 	"github.com/kuli-dev/kulidev/internal/docs"
+	"github.com/kuli-dev/kulidev/internal/git"
 	"github.com/kuli-dev/kulidev/internal/scan"
 	"github.com/kuli-dev/kulidev/internal/store"
 	"github.com/kuli-dev/kulidev/internal/term"
@@ -125,6 +126,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/devices", s.deviceList)
 	mux.HandleFunc("POST /api/devices/code", s.deviceCode)
 	mux.HandleFunc("DELETE /api/devices/{id}", s.deviceRevoke)
+	mux.HandleFunc("GET /api/git/status", s.gitStatus)
+	mux.HandleFunc("GET /api/git/diff", s.gitDiff)
+	mux.HandleFunc("POST /api/git/{op}", s.gitWrite)
 	mux.HandleFunc("GET /api/agents", s.agentList)
 	mux.HandleFunc("POST /api/agents", s.agentStart)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { fail(w, http.StatusNotFound, "no such endpoint") })
@@ -681,6 +685,74 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
+}
+
+// ---- git ---------------------------------------------------------------------------
+
+func (s *Server) repo() git.Repo { return git.Repo{Root: s.root} }
+
+func (s *Server) gitStatus(w http.ResponseWriter, r *http.Request) {
+	st, err := s.repo().Status(r.Context())
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"status": st, "writable": !s.readOnly})
+}
+
+func (s *Server) gitDiff(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	orig, mod, binary, err := s.repo().Diff(r.Context(), q.Get("path"), q.Get("staged") == "1")
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if len(orig)+len(mod) > 2*maxFileBytes {
+		fail(w, http.StatusRequestEntityTooLarge, "file too large to diff here")
+		return
+	}
+	writeJSON(w, map[string]any{"original": orig, "modified": mod, "binary": binary})
+}
+
+// gitWrite handles stage, unstage, discard and commit.
+func (s *Server) gitWrite(w http.ResponseWriter, r *http.Request) {
+	if s.readOnly {
+		fail(w, http.StatusForbidden, "this workspace is read-only (kuli serve --read-only)")
+		return
+	}
+	var req struct {
+		Paths     []string `json:"paths"`
+		Message   string   `json:"message"`
+		Untracked bool     `json:"untracked"` // discard: also delete untracked files
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, "bad request body")
+		return
+	}
+	repo, ctx := s.repo(), r.Context()
+	var err error
+	resp := map[string]any{"ok": true}
+	switch r.PathValue("op") {
+	case "stage":
+		err = repo.Stage(ctx, req.Paths)
+	case "unstage":
+		err = repo.Unstage(ctx, req.Paths)
+	case "discard":
+		err = repo.Discard(ctx, req.Paths, req.Untracked)
+	case "commit":
+		var hash string
+		hash, err = repo.Commit(ctx, req.Message)
+		resp["commit"] = hash
+	default:
+		fail(w, http.StatusNotFound, "unknown git operation")
+		return
+	}
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.scheduleRescan() // discards change files; commits change HEAD
+	writeJSON(w, resp)
 }
 
 // ---- pairing & devices ------------------------------------------------------------

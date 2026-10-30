@@ -41,6 +41,12 @@ the workspace, IDE and remote features are layered on top.
 - [x] Agent sessions in the workbench terminal: Claude Code (--mcp-config) and Codex (-c mcp_servers…) start with kuli MCP attached; OpenCode/Aider detected
 - [x] Lazy-load Monaco, the map and the terminal (first download 1,026 KB → 103 KB gzipped)
 
+## v0.7 — Source control
+- [x] Changes view: status, badge, side-by-side diffs, stage/unstage/discard, commit via the user's git
+- [x] `.kulidev/.gitignore` covers devices, TLS keys and agent configs (was database only)
+- [ ] Branches: switch, create; pull/push with the user's credentials
+- [ ] Inline change markers in the editor gutter; blame on hover
+
 ## v0.6 — Remote & mobile
 - [x] Device pairing: one-time codes (10 min, single use, rate-limited) + terminal QR; per-device revocable sessions
 - [x] TLS required off-loopback (self-signed generator, own cert, or explicit --insecure-http for Tailscale/WireGuard)

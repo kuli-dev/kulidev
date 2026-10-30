@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "../api";
+import { api, type GitStatus } from "../api";
 import { useLoad } from "../hooks";
 import { clearDefinitionCache } from "../defs";
 import { parse, type Route } from "../router";
@@ -13,19 +13,22 @@ import { Icon } from "./Icons";
 import { DevicesPane } from "./Pair";
 import { QuickOpen } from "./QuickOpen";
 
+import { ChangesPane } from "./Changes";
 import { AgentsPane, DocsPane, Explorer, IssuesPane, SearchPane } from "./SidePanes";
 
 // The editor (Monaco, ~1 MB) loads on first file open, not with the page.
 const CodeTab = lazy(() => import("./CodeTab").then((m) => ({ default: m.CodeTab })));
 // Likewise the map (React Flow) and the terminal (xterm.js).
 const MapView = lazy(() => import("../views/Map").then((m) => ({ default: m.MapView })));
+const DiffTab = lazy(() => import("./DiffTab").then((m) => ({ default: m.DiffTab })));
 const TerminalPanel = lazy(() => import("./Terminal").then((m) => ({ default: m.TerminalPanel })));
 
-type View = "explorer" | "search" | "docs" | "issues" | "agents" | "devices";
+type View = "explorer" | "search" | "changes" | "docs" | "issues" | "agents" | "devices";
 
 const WELCOME: Tab = { id: "welcome", kind: "welcome" };
 
-const tabId = (t: NewTab): string => (t.kind === "file" ? `file:${t.path}` : t.kind === "doc" ? `doc:${t.name}` : t.kind);
+const tabId = (t: NewTab): string =>
+  t.kind === "file" ? `file:${t.path}` : t.kind === "doc" ? `doc:${t.name}` : t.kind === "diff" ? `diff:${t.staged ? "s" : "w"}:${t.path}` : t.kind;
 
 function loadTabs(key: string): { tabs: Tab[]; active: string } {
   try {
@@ -52,6 +55,25 @@ export function Workbench() {
   const [termOpen, setTermOpen] = useState(false);
   const [termH, setTermH] = useState(280);
   const [termFocus, setTermFocus] = useState<string | undefined>();
+  const [git, setGit] = useState<{ status: GitStatus; writable: boolean } | null>(null);
+  // Bumped whenever the git status actually changes, so open diffs re-read both sides.
+  const [gitVersion, setGitVersion] = useState(0);
+  const refreshGit = useCallback(() => {
+    api.gitStatus().then((g) => {
+      setGit((cur) => {
+        if (JSON.stringify(cur) === JSON.stringify(g)) return cur;
+        setGitVersion((v) => v + 1);
+        return g;
+      });
+    }, () => {});
+  }, []);
+  // Keep the change count fresh: on an interval, and whenever the window regains focus.
+  useEffect(() => {
+    refreshGit();
+    const t = setInterval(refreshGit, view === "changes" ? 3000 : 10000);
+    addEventListener("focus", refreshGit);
+    return () => { clearInterval(t); removeEventListener("focus", refreshGit); };
+  }, [refreshGit, view]);
 
   async function startAgent(id: string) {
     const t = await api.startAgent(id, 110, Math.max(10, Math.floor(termH / 18)));
@@ -150,6 +172,7 @@ export function Workbench() {
       if (e.key === "`" || e.code === "Backquote") { e.preventDefault(); if (ov.data?.terminals) setTermOpen((o) => !o); }
       else if (k === "p" && !e.shiftKey) { e.preventDefault(); setQuick(true); }
       else if (k === "f" && e.shiftKey) { e.preventDefault(); setView("search"); }
+      else if (k === "g" && e.shiftKey) { e.preventDefault(); setView("changes"); }
       else if (k === "b") { e.preventDefault(); setView((v) => (v ? null : "explorer")); }
       else if (k === "l") { e.preventDefault(); setChat((c) => !c); }
       else if (k === "w" && e.altKey) { e.preventDefault(); closeTab(active); }
@@ -179,6 +202,7 @@ export function Workbench() {
   const activity: { v: View; label: string; icon: () => React.ReactNode }[] = [
     { v: "explorer", label: "Explorer (Ctrl+B)", icon: Icon.files },
     { v: "search", label: "Search (Ctrl+Shift+F)", icon: Icon.search },
+    { v: "changes", label: "Changes (Ctrl+Shift+G)", icon: Icon.git },
     { v: "docs", label: "Docs", icon: Icon.docs },
     { v: "issues", label: "Issues", icon: Icon.issues },
     ...(ov.data?.terminals ? [{ v: "agents" as View, label: "Agents", icon: Icon.agent }] : []),
@@ -193,6 +217,9 @@ export function Workbench() {
           <button key={a.v} className={`act ${view === a.v ? "on" : ""}`} title={a.label} aria-label={a.label}
             aria-pressed={view === a.v} onClick={() => setView((v) => (v === a.v ? null : a.v))}>
             <a.icon />
+            {a.v === "changes" && git?.status.git && git.status.changes.length > 0 && (
+              <span className="act-badge" aria-label={`${git.status.changes.length} changes`}>{Math.min(git.status.changes.length, 99)}</span>
+            )}
           </button>
         ))}
         <button className="act" title="Map" aria-label="Open map" onClick={() => openTab({ kind: "map" })}><Icon.map /></button>
@@ -209,6 +236,10 @@ export function Workbench() {
           {view === "search" && <SearchPane initial={searchQ} onOpen={openFile} />}
           {view === "docs" && <DocsPane onOpenDoc={(name) => { openTab({ kind: "doc", name }); if (narrow) setView(null); }} />}
           {view === "issues" && <IssuesPane onOpen={openFile} />}
+          {view === "changes" && (
+            <ChangesPane status={git?.status ?? null} writable={git?.writable ?? false} onChanged={refreshGit}
+              onOpenDiff={(path, staged) => { openTab({ kind: "diff", path, staged }); if (narrow) setView(null); }} />
+          )}
           {view === "agents" && <AgentsPane onStart={startAgent} />}
           {view === "devices" && <DevicesPane />}
         </aside>
@@ -247,6 +278,11 @@ export function Workbench() {
             </Suspense>
           )}
           {current?.kind === "doc" && <DocTab name={current.name} />}
+          {current?.kind === "diff" && (
+            <Suspense fallback={<p className="muted pad">Loading the diff…</p>}>
+              <DiffTab key={`${current.id}@${gitVersion}`} path={current.path} staged={current.staged} narrow={narrow} />
+            </Suspense>
+          )}
           {current?.kind === "welcome" && <div className="welcome-tab"><OverviewView ov={ov} onRescan={rescan} /></div>}
         </div>
         {termOpen && ov.data?.terminals && (

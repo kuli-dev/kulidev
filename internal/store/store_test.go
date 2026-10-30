@@ -3,6 +3,7 @@ package store
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/kuli-dev/kulidev/internal/scan"
@@ -109,5 +110,25 @@ func TestScanSaveQuery(t *testing.T) {
 	}
 	if !got["web/src/api.ts"] || !got["npm:react"] {
 		t.Errorf("deps of app.tsx = %+v", imps)
+	}
+}
+
+func TestGitignoreProtectsSecrets(t *testing.T) {
+	dir := t.TempDir()
+	// An older kuli wrote a gitignore covering only the database.
+	os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(DBFile+"*\n"), 0o644)
+	st, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	st.Close()
+	b, _ := os.ReadFile(filepath.Join(dir, ".gitignore"))
+	for _, want := range []string{"kulidev.db*", "devices.json", "tls/", "agents/"} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf(".gitignore missing %q:\n%s", want, b)
+		}
+	}
+	if strings.Contains(string(b), "knowledge") {
+		t.Error("generated docs should stay committable")
 	}
 }

@@ -94,6 +94,10 @@ A VS Code-style workbench over the knowledge graph:
   disk since you opened it (git pull, another editor, an agent), you get a conflict and
   choose *Reload from disk* or *Overwrite with mine*. Writes are atomic, and the knowledge
   graph refreshes in the background. `kuli serve --read-only` turns editing off.
+- **Changes** (**Ctrl+Shift+G**): git status with a count badge, side-by-side diffs (inline on
+  phones), stage / unstage / discard per file or all, and commit (Ctrl+Enter). It runs your own
+  `git`, so hooks, identity and config apply; nothing is pushed for you. Discarding an untracked
+  file asks first, since it deletes it.
 - **Integrated terminal** (**Ctrl+`**): real shells on the server that keep running when
   you close the panel or the browser; reopening replays their recent output.
 - **Agents**: start Claude Code or Codex in the workspace terminal with KuliDev's MCP
