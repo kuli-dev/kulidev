@@ -71,7 +71,7 @@ Every answer warns the agent when `HEAD` has moved since the last scan.
 
 - **Repository-first** — works on the repos you already have; no project format.
 - **Evidence-first** — every edge has provenance (file, lines, origin, confidence).
-- **Agent-agnostic** — exposes knowledge to any coding agent (MCP coming).
+- **Agent-agnostic** — exposes knowledge to any coding agent over MCP.
 - **Local-first** — a single binary; your code never leaves your machine unless you say so.
 
 ## Stack
