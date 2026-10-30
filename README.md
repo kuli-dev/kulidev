@@ -123,9 +123,11 @@ A VS Code-style workbench over the knowledge graph:
   quiet or exits (needs https or localhost).
 - **Integrated terminal** (**Ctrl+`**): real shells on the server that keep running when
   you close the panel or the browser; reopening replays their recent output.
-- **Agents**: start Claude Code or Codex in the workspace terminal with KuliDev's MCP
-  server already attached, so the agent can search the code and check who depends on what
-  before it changes anything. OpenCode and Aider are detected and launched too.
+- **Agents**: start Claude Code, Codex or Cursor's CLI in the workspace terminal with
+  KuliDev's MCP server attached, so the agent can search the code and check who depends on
+  what before it changes anything. Cursor reads MCP servers only from its config files, so
+  the first start asks before KuliDev adds one entry to `~/.cursor/mcp.json` (other servers
+  kept, original backed up). OpenCode and Aider are detected and launched too.
 - **Map** (component graph), **Docs** (with stale warnings), **Issues** (broken imports) and
   a **Welcome** overview as tabs or side views. **Ctrl+Shift+F** search, **Ctrl+B** side bar.
 
@@ -165,6 +167,12 @@ you say `--insecure-http`, and terminals stay off there unless you add `--allow-
 
 ```sh
 claude mcp add kulidev -- kuli mcp -C /path/to/repo     # Claude Code
+```
+
+Cursor (editor and `agent` CLI), in `~/.cursor/mcp.json` — one entry for every folder:
+
+```json
+{ "mcpServers": { "kulidev": { "command": "kuli", "args": ["mcp", "-C", "${workspaceFolder}"] } } }
 ```
 
 `kuli mcp` scans the repo on first start, then serves:

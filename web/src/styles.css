@@ -741,3 +741,7 @@ figure.mmd { margin: 1.2rem 0; padding: 12px; border: 1px solid var(--line); bor
 .docs-actions { display: flex; flex-wrap: wrap; gap: 6px; }
 .docs-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .check { display: flex; align-items: center; gap: 6px; }
+
+.cursor-ask { width: min(560px, 100%); }
+.cursor-ask p { margin: 0; }
+.cursor-ask pre { margin: 0; font-size: 12px; overflow-x: auto; }

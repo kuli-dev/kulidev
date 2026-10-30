@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -22,6 +23,11 @@ the knowledge graph. Scans the repository first if it has no knowledge base yet.
   claude mcp add kulidev -- kuli mcp -C /path/to/repo`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			// Cursor passes ${workspaceFolder}; a client that leaves it unexpanded gets the
+			// folder it started the server in.
+			if strings.Contains(o.repo, "${") {
+				o.repo = "."
+			}
 			root, err := filepath.Abs(o.repo)
 			if err != nil {
 				return err

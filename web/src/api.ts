@@ -130,8 +130,8 @@ export const api = {
     call<{ ok: boolean }>(`api/terminals/${q(id)}/input`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data }) }),
   killTerminal: (id: string) => call<{ ok: boolean }>(`api/terminals/${q(id)}`, { method: "DELETE" }),
   agents: () => call<{ enabled: boolean; agents: AgentInfo[] }>("api/agents"),
-  startAgent: (id: string, cols: number, rows: number) =>
-    call<TermInfo>("api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, cols, rows }) }),
+  startAgent: (id: string, cols: number, rows: number, cursorConfig?: "add" | "skip") =>
+    call<TermInfo>("api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, cols, rows, cursorConfig }) }),
   authState: () => call<{ required: boolean; paired: boolean; device?: Device }>("api/auth/state"),
   pair: (code: string, name: string) =>
     call<{ device: Device }>("api/pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, name }) }),

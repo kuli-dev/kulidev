@@ -280,6 +280,12 @@ export function IssuesPane({ onOpen }: { onOpen: (p: string, from?: number) => v
 
 export function AgentsPane({ onStart }: { onStart: (id: string) => Promise<void> }) {
   const a = useLoad(api.agents, []);
+  // Starting Cursor can attach the knowledge graph (consent dialog): show it here too.
+  useEffect(() => {
+    const again = () => a.reload();
+    addEventListener("kuli-agents-changed", again);
+    return () => removeEventListener("kuli-agents-changed", again);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const list = a.data?.agents ?? [];

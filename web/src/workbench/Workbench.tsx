@@ -1,5 +1,5 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, setGitRepo, type GitState, type TermInfo } from "../api";
+import { ApiError, api, setGitRepo, type GitState, type TermInfo } from "../api";
 import { useLoad } from "../hooks";
 import { clearDefinitionCache } from "../defs";
 import { parse, type Route } from "../router";
@@ -120,10 +120,23 @@ export function Workbench() {
     return () => clearInterval(iv);
   }, [ov.data?.terminals, view]);
 
-  async function startAgent(id: string) {
-    const t = await api.startAgent(id, 110, Math.max(10, Math.floor(termH / 18)));
-    setTermFocus(t.id);
-    setTermOpen(true);
+  // Cursor's CLI reads MCP servers only from its config files: the first start asks
+  // before KuliDev adds itself to ~/.cursor/mcp.json.
+  const [cursorAsk, setCursorAsk] = useState<{ file: string; entry: unknown; local: boolean } | null>(null);
+  async function startAgent(id: string, cursorConfig?: "add" | "skip") {
+    try {
+      const t = await api.startAgent(id, 110, Math.max(10, Math.floor(termH / 18)), cursorConfig);
+      setCursorAsk(null);
+      dispatchEvent(new Event("kuli-agents-changed"));
+      setTermFocus(t.id);
+      setTermOpen(true);
+    } catch (e) {
+      if (e instanceof ApiError && e.body.needsCursorConsent) {
+        setCursorAsk({ file: String(e.body.file), entry: e.body.entry, local: !!e.body.local });
+        return;
+      }
+      throw e;
+    }
   }
   const [scan, setScan] = useState<"idle" | "busy" | string>("idle");
   const [dirty, setDirty] = useState<Set<string>>(() => new Set());
@@ -501,6 +514,31 @@ export function Workbench() {
       </footer>
 
       {browse && <FolderDialog onPick={pickFolder} onClose={() => setBrowse(false)} />}
+      {cursorAsk && (
+        <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && setCursorAsk(null)}>
+          <div className="modal cursor-ask" role="dialog" aria-modal="true" aria-label="Connect Cursor to KuliDev">
+            <div className="modal-head"><h2>Give Cursor KuliDev's knowledge graph?</h2></div>
+            <p className="small">
+              Cursor's CLI reads its tools from a config file, not from the command line. KuliDev can add one entry to your
+              Cursor config so Cursor (the CLI and the editor) can search this codebase's map, symbols and dependencies.
+            </p>
+            <p className="small">File: <code>{cursorAsk.file}</code></p>
+            <pre className="code-block">{JSON.stringify({ kulidev: cursorAsk.entry }, null, 2)}</pre>
+            <p className="muted small">
+              Your other servers stay as they are, and the original file is backed up next to it. Cursor asks you to approve
+              “kulidev” the first time it uses it.
+            </p>
+            <div className="modal-foot">
+              <span className="st-gap" />
+              <button className="btn" onClick={() => setCursorAsk(null)}>Cancel</button>
+              <button className="btn" onClick={() => startAgent("cursor", "skip")}>Start without it</button>
+              {cursorAsk.local
+                ? <button className="btn primary" onClick={() => startAgent("cursor", "add")}>Add and start</button>
+                : <span className="muted small">Only on the computer running KuliDev.</span>}
+            </div>
+          </div>
+        </div>
+      )}
       {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
       {switcher && (
         <RecentPicker recent={ws.recent} current={root} onPick={pickFolder} onClose={() => setSwitcher(false)}

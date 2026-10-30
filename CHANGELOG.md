@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Cursor CLI** (`agent`, or `cursor-agent` on older installs) in Agents and Pulse. Its
+  first start asks before adding KuliDev to `~/.cursor/mcp.json` — one entry,
+  `kuli mcp -C ${workspaceFolder}`, so Cursor knows any folder; other servers are kept, the
+  original is backed up, a file KuliDev cannot parse is left alone. KuliDev never passes
+  `--approve-mcps`: Cursor asks you to approve the server itself.
+- `kuli mcp` given an unexpanded `${workspaceFolder}` serves the folder it was started in.
+
 - **Generate docs from the Docs panel**: Generate / Regenerate all / Refresh stale, with
   progress, Stop, and a facts-only option; uses the model from Settings. No command line
   needed.

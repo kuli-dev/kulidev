@@ -32,13 +32,22 @@ type Workspace struct {
 type adapter struct {
 	Agent
 	args func(ws Workspace) ([]string, error)
+	find func() (string, error) // nil: Bin on PATH
+}
+
+func (a adapter) bin() (string, error) {
+	if a.find != nil {
+		return a.find()
+	}
+	return lookPath(a.Bin)
 }
 
 var adapters = []adapter{
-	{Agent{ID: "claude", Name: "Claude Code", Bin: "claude", MCP: true}, claudeArgs},
-	{Agent{ID: "codex", Name: "OpenAI Codex", Bin: "codex", MCP: true}, codexArgs},
-	{Agent{ID: "opencode", Name: "OpenCode", Bin: "opencode", Hint: "add kuli mcp to opencode.json to give it the knowledge graph"}, noArgs},
-	{Agent{ID: "aider", Name: "Aider", Bin: "aider", Hint: "Aider has no MCP support; it runs without the knowledge graph"}, noArgs},
+	{Agent: Agent{ID: "claude", Name: "Claude Code", Bin: "claude", MCP: true}, args: claudeArgs},
+	{Agent: Agent{ID: "codex", Name: "OpenAI Codex", Bin: "codex", MCP: true}, args: codexArgs},
+	{Agent: Agent{ID: "cursor", Name: "Cursor CLI", Bin: "agent"}, args: cursorArgs, find: cursorBin},
+	{Agent: Agent{ID: "opencode", Name: "OpenCode", Bin: "opencode", Hint: "add kuli mcp to opencode.json to give it the knowledge graph"}, args: noArgs},
+	{Agent: Agent{ID: "aider", Name: "Aider", Bin: "aider", Hint: "Aider has no MCP support; it runs without the knowledge graph"}, args: noArgs},
 }
 
 // lookPath is replaceable in tests.
@@ -49,11 +58,28 @@ func List() []Agent {
 	out := make([]Agent, 0, len(adapters))
 	for _, a := range adapters {
 		ag := a.Agent
-		_, err := lookPath(a.Bin)
+		_, err := a.bin()
 		ag.Installed = err == nil
+		if ag.ID == "cursor" {
+			ag.MCP = CursorConfigured()
+			if !ag.MCP {
+				ag.Hint = "On first start, KuliDev offers to add its knowledge graph to ~/.cursor/mcp.json"
+			}
+		}
 		out = append(out, ag)
 	}
 	return out
+}
+
+// Installed reports whether agent id's CLI is available.
+func Installed(id string) bool {
+	for _, a := range adapters {
+		if a.ID == id {
+			_, err := a.bin()
+			return err == nil
+		}
+	}
+	return false
 }
 
 // Command returns the argv that starts agent id in the workspace.
@@ -62,7 +88,7 @@ func Command(id string, ws Workspace) (name string, argv []string, err error) {
 		if a.ID != id {
 			continue
 		}
-		bin, err := lookPath(a.Bin)
+		bin, err := a.bin()
 		if err != nil {
 			return "", nil, fmt.Errorf("%s is not installed (no %q on PATH)", a.Name, a.Bin)
 		}

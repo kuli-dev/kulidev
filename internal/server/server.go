@@ -17,6 +17,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -1318,6 +1319,26 @@ func (s *Server) termSocket(w http.ResponseWriter, r *http.Request) {
 	c.Close(websocket.StatusNormalClosure, "session ended")
 }
 
+// kuliBinary is the program agents start for the MCP server: kuli beside this program
+// when it is there (the release archive), else this program (KuliDev runs kuli
+// commands too).
+func kuliBinary() (string, error) {
+	self, err := os.Executable()
+	if err != nil {
+		return "", err
+	}
+	name := "kuli"
+	if runtime.GOOS == "windows" {
+		name = "kuli.exe"
+	}
+	if sib := filepath.Join(filepath.Dir(self), name); sib != self {
+		if info, err := os.Stat(sib); err == nil && !info.IsDir() {
+			return sib, nil
+		}
+	}
+	return self, nil
+}
+
 func (s *Server) agentList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"enabled": s.terms != nil, "agents": agents.List()})
 }
@@ -1331,15 +1352,41 @@ func (s *Server) agentStart(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ID         string `json:"id"`
 		Cols, Rows int
+		// Cursor: "add" puts KuliDev in ~/.cursor/mcp.json, "skip" starts without it.
+		CursorConfig string `json:"cursorConfig"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<10)).Decode(&req); err != nil {
 		fail(w, http.StatusBadRequest, "agent id required")
 		return
 	}
-	kuli, err := os.Executable()
+	kuli, err := kuliBinary()
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err.Error())
 		return
+	}
+	if req.ID == "cursor" && agents.Installed("cursor") {
+		switch {
+		case agents.CursorConfigured():
+			agents.RefreshCursorConfig(kuli) // KuliDev may have moved since
+		case req.CursorConfig == "add":
+			if s.auth != nil {
+				fail(w, http.StatusForbidden, "Cursor's config can only be changed on the computer running KuliDev")
+				return
+			}
+			if err := agents.AddCursorConfig(kuli); err != nil {
+				fail(w, http.StatusConflict, err.Error())
+				return
+			}
+		case req.CursorConfig != "skip":
+			// Ask first: this changes a file outside the folder, used by every Cursor session.
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusConflict)
+			json.NewEncoder(w).Encode(map[string]any{
+				"error": "Cursor needs KuliDev in its MCP config", "needsCursorConsent": true,
+				"file": agents.CursorConfigPath(), "entry": agents.CursorEntry(kuli), "local": s.auth == nil,
+			})
+			return
+		}
 	}
 	name, argv, err := agents.Command(req.ID, agents.Workspace{Root: s.root, DataDir: s.dataDir, Kuli: kuli})
 	if err != nil {
