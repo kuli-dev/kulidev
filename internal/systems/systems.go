@@ -40,11 +40,13 @@ type Evidence struct {
 	Path string `json:"path"`
 	Line int    `json:"line"`
 	Text string `json:"text"`
+	// Target is where the other side is, when known (the route a call reaches).
+	Target string `json:"target,omitempty"`
 }
 
 // Link kinds.
 const (
-	Imports   = "imports"    // code in From imports code of To
+	Imports   = "imports"    // code in From imports code of To (CallsAPI: calls its HTTP routes)
 	DependsOn = "depends on" // From's manifest declares To's package
 	Config    = "configures" // From's deploy/config files refer to To
 )
@@ -97,6 +99,7 @@ func Build(root string, snap *store.Snapshot) Map {
 	b.imports(snap)
 	b.dependencies(snap)
 	b.config(snap)
+	b.http(snap)
 
 	out := Map{Projects: b.projects, Links: []Link{}}
 	for _, l := range b.links {
@@ -112,13 +115,16 @@ func Build(root string, snap *store.Snapshot) Map {
 	return out
 }
 
-// detect finds projects: the outermost folders (up to three deep) that are a git
+// maxDepth bounds how deep projects are looked for.
+const maxDepth = 6
+
+// detect finds projects: the outermost folders (up to maxDepth deep) that are a git
 // repository or have a project file such as go.mod or package.json at their top.
 func detect(root string, snap *store.Snapshot, files map[string]bool) []Project {
 	dirs := map[string]bool{}
 	for _, f := range snap.Files {
 		parts := strings.Split(f.Path, "/")
-		for d := 1; d < len(parts) && d <= 3; d++ {
+		for d := 1; d < len(parts) && d <= maxDepth; d++ {
 			dirs[strings.Join(parts[:d], "/")] = true
 		}
 	}

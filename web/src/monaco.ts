@@ -1,3 +1,4 @@
+import { isDark } from "./theme";
 // Monaco set up for KuliDev: core editor + syntax highlighting only (no language
 // servers), local workers, KuliDev themes, and knowledge-graph hover/definition.
 import "monaco-editor/esm/vs/editor/edcore.main";
@@ -86,8 +87,8 @@ monaco.editor.defineTheme("kuli-light", {
   },
 });
 
-export const themeName = () => (matchMedia("(prefers-color-scheme: dark)").matches ? "kuli-dark" : "kuli-light");
-matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => monaco.editor.setTheme(themeName()));
+export const themeName = () => (isDark() ? "kuli-dark" : "kuli-light");
+addEventListener("kuli-theme", () => monaco.editor.setTheme(themeName()));
 
 // ---- knowledge providers -----------------------------------------------------
 

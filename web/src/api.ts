@@ -43,15 +43,27 @@ export type AgentInfo = { id: string; name: string; installed: boolean; mcp: boo
 export type Device = { id: string; name: string; created: string; lastSeen: string };
 
 export type GitChange = { path: string; origPath?: string; index: string; worktree: string; conflict?: boolean };
+// A folder can hold several repositories; branch, commit and push act on this one.
+let gitRepo = "";
+export const setGitRepo = (path: string) => { gitRepo = path; };
+export type RepoSummary = { path: string; name: string; branch: string; changes: number; ahead: number; behind: number; error?: string };
+export type GitState = { status: GitStatus; writable: boolean; repo: string; repos?: RepoSummary[] };
 export type GitStatus = { git: boolean; branch: string; upstream?: string; ahead: number; behind: number; initial: boolean; changes: GitChange[] };
 
 export type SysProject = {
   path: string; name: string; git: boolean; markers: string[]; packages: string[];
   files: number; lines: number; langs: { lang: string; lines: number }[];
 };
-export type SysEvidence = { path: string; line: number; text: string };
-export type SysLink = { from: string; to: string; kind: "imports" | "depends on" | "configures"; count: number; evidence: SysEvidence[] };
+export type SysEvidence = { path: string; line: number; text: string; target?: string };
+export type SysLink = { from: string; to: string; kind: "imports" | "calls API" | "depends on" | "configures"; count: number; evidence: SysEvidence[] };
 export type SystemsMap = { projects: SysProject[]; links: SysLink[] };
+
+export type LLMSettings = { baseURL: string; model: string; reasoningEffort: string; maxTokens: number; hasKey?: boolean };
+export type SettingsInfo = {
+  llm: LLMSettings; activeModel: string; fromStartup: boolean; settingsFile: string; recentFile: string;
+  readOnly: boolean; terminals: boolean; version: string;
+};
+export type LLMInput = { baseURL: string; model: string; reasoningEffort: string; maxTokens: number; apiKey?: string; clearKey?: boolean };
 
 export type RecentFolder = { path: string; name: string; opened: string; exists: boolean };
 export type OpenJob = {
@@ -119,15 +131,24 @@ export const api = {
   devices: () => call<{ required: boolean; current: string; devices: Device[] }>("api/devices"),
   newPairingCode: () => call<{ code: string; expiresIn: number }>("api/devices/code", { method: "POST" }),
   revokeDevice: (id: string) => call<{ ok: boolean }>(`api/devices/${q(id)}`, { method: "DELETE" }),
-  gitStatus: () => call<{ status: GitStatus; writable: boolean }>("api/git/status"),
+  gitStatus: () => call<GitState>(`api/git/status?repo=${q(gitRepo)}`),
   gitDiff: (path: string, staged: boolean) =>
     call<{ original: string; modified: string; binary: boolean }>(`api/git/diff?path=${q(path)}${staged ? "&staged=1" : ""}`),
-  gitBranches: () => call<{ branches: { name: string; current: boolean; upstream?: string }[] }>("api/git/branches"),
+  gitBranches: () => call<{ branches: { name: string; current: boolean; upstream?: string }[] }>(`api/git/branches?repo=${q(gitRepo)}`),
   gitLines: (path: string) => call<{ changes: { kind: "added" | "modified" | "deleted"; start: number; count: number }[] }>(`api/git/lines?path=${q(path)}`),
-  gitPatch: () => call<{ patch: string; truncated: boolean }>("api/git/patch"),
+  gitPatch: () => call<{ patch: string; truncated: boolean }>(`api/git/patch?repo=${q(gitRepo)}`),
   git: (op: "stage" | "unstage" | "discard" | "commit" | "switch" | "fetch" | "pull" | "push",
     body: { paths?: string[]; message?: string; untracked?: boolean; branch?: string; create?: boolean }) =>
-    call<{ ok: boolean; commit?: string }>(`api/git/${op}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
+    call<{ ok: boolean; commit?: string }>(`api/git/${op}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...body, repo: gitRepo }),
+    }),
+  settings: () => call<SettingsInfo>("api/settings"),
+  saveSettings: (llm: LLMInput) =>
+    call<{ ok: boolean; activeModel: string }>("api/settings", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ llm }) }),
+  testSettings: (llm: LLMInput) =>
+    call<{ ok: boolean; reply?: string; error?: string; ms: number }>("api/settings/test", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ llm }),
+    }),
   systems: () => call<SystemsMap>("api/systems"),
   workspace: () => call<WorkspaceInfo>("api/workspace"),
   fsList: (path: string) => call<DirList>(`api/fs/list?path=${q(path)}`),

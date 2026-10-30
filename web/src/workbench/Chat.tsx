@@ -44,7 +44,7 @@ export function Chat({ enabled, model, onClose }: { enabled: boolean; model?: st
           <p className="muted small pad-x">
             {enabled
               ? "Ask how something works. Answers use only this repository and cite the lines they rely on; click a citation to open it."
-              : "Asking needs a model: restart kuli serve with KULI_LLM_BASE_URL and KULI_LLM_MODEL set."}
+              : "Asking needs a model. Set one in Settings (the gear at the bottom left, or Ctrl+,)."}
           </p>
         )}
         {turns.map((t, i) => (

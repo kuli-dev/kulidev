@@ -50,6 +50,7 @@ type Server struct {
 	mu    sync.RWMutex
 	comps []*docs.Component
 	snap  *store.Snapshot
+	repos []repoRef // git repositories in the folder
 	scanM sync.Mutex
 
 	readOnly  bool
@@ -98,8 +99,9 @@ func (s *Server) reload() error {
 		return err
 	}
 	comps, _ := docs.BuildComponents(snap)
+	repos := findRepos(s.root, snap)
 	s.mu.Lock()
-	s.snap, s.comps = snap, comps
+	s.snap, s.comps, s.repos = snap, comps, repos
 	s.mu.Unlock()
 	return nil
 }
@@ -275,8 +277,8 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 		"topInternal":   st.TopInternal,
 		"topExternal":   st.TopExternal,
 		"manifests":     st.Manifests,
-		"llm":           s.llm != nil,
-		"model":         modelName(s.llm),
+		"llm":           s.chatter() != nil,
+		"model":         modelName(s.chatter()),
 		"readOnly":      s.readOnly,
 		"terminals":     s.terms != nil,
 	})
@@ -545,8 +547,8 @@ func stripFrontMatter(md string) string {
 // ---- ask & rescan ----------------------------------------------------------
 
 func (s *Server) ask(w http.ResponseWriter, r *http.Request) {
-	if s.llm == nil {
-		fail(w, http.StatusServiceUnavailable, "no model configured: set KULI_LLM_BASE_URL and KULI_LLM_MODEL, then restart kuli serve")
+	if s.chatter() == nil {
+		fail(w, http.StatusServiceUnavailable, "no model configured: set one in Settings, or start kuli serve with --llm-url and --llm-model")
 		return
 	}
 	var req struct {
@@ -558,7 +560,7 @@ func (s *Server) ask(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Minute)
 	defer cancel()
-	a, err := ask.Ask(ctx, s.store, req.Question, ask.Options{Root: s.root, LLM: s.llm, LinkBase: "#/file"})
+	a, err := ask.Ask(ctx, s.store, req.Question, ask.Options{Root: s.root, LLM: s.chatter(), LinkBase: "#/file"})
 	if err != nil {
 		fail(w, http.StatusBadGateway, err.Error())
 		return
@@ -729,20 +731,130 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 
 // ---- git ---------------------------------------------------------------------------
 
-func (s *Server) repo() git.Repo { return git.Repo{Root: s.root} }
+// A folder may hold several repositories; each git call names one by its path in
+// the folder ("" when the folder itself is the repository). File paths stay relative
+// to the folder and are routed to the repository that contains them.
+
+// repoAt returns the repository at rel (default: the first one).
+func (s *Server) repoAt(rel string) (git.Repo, repoRef, error) {
+	repos := s.repoList()
+	if len(repos) == 0 {
+		return git.Repo{Root: s.root}, repoRef{}, nil // not a repository: git reports it
+	}
+	if rel == "" && repos[0].Path != "" {
+		return s.gitRepo(repos[0]), repos[0], nil
+	}
+	for _, r := range repos {
+		if r.Path == rel {
+			return s.gitRepo(r), r, nil
+		}
+	}
+	return git.Repo{}, repoRef{}, errors.New("no such repository in this folder")
+}
+
+// owner returns the repository containing a folder-relative path and the path inside it.
+func (s *Server) owner(p string) (git.Repo, repoRef, string, error) {
+	best := -1
+	repos := s.repoList()
+	for i, r := range repos {
+		if r.Path == "" || strings.HasPrefix(p, r.Path+"/") {
+			if best < 0 || len(r.Path) > len(repos[best].Path) {
+				best = i
+			}
+		}
+	}
+	if best < 0 {
+		if len(repos) == 0 {
+			return git.Repo{Root: s.root}, repoRef{}, p, nil
+		}
+		return git.Repo{}, repoRef{}, "", errors.New("that file is not inside a git repository")
+	}
+	r := repos[best]
+	rel := p
+	if r.Path != "" {
+		rel = strings.TrimPrefix(p, r.Path+"/")
+	}
+	return s.gitRepo(r), r, rel, nil
+}
+
+func (s *Server) gitRepo(r repoRef) git.Repo {
+	return git.Repo{Root: filepath.Join(s.root, filepath.FromSlash(r.Path))}
+}
+
+func prefixed(prefix string, st *git.Status) *git.Status {
+	if prefix == "" || st == nil {
+		return st
+	}
+	out := *st
+	out.Changes = make([]git.Change, len(st.Changes))
+	for i, c := range st.Changes {
+		c.Path = path.Join(prefix, c.Path)
+		if c.OrigPath != "" {
+			c.OrigPath = path.Join(prefix, c.OrigPath)
+		}
+		out.Changes[i] = c
+	}
+	return &out
+}
+
+type repoSummary struct {
+	Path    string `json:"path"`
+	Name    string `json:"name"`
+	Branch  string `json:"branch"`
+	Changes int    `json:"changes"`
+	Ahead   int    `json:"ahead"`
+	Behind  int    `json:"behind"`
+	Error   string `json:"error,omitempty"`
+}
 
 func (s *Server) gitStatus(w http.ResponseWriter, r *http.Request) {
-	st, err := s.repo().Status(r.Context())
+	repo, ref, err := s.repoAt(r.URL.Query().Get("repo"))
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	st, err := repo.Status(r.Context())
 	if err != nil {
 		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, map[string]any{"status": st, "writable": !s.readOnly})
+	resp := map[string]any{"status": prefixed(ref.Path, st), "repo": ref.Path, "writable": !s.readOnly}
+	if repos := s.repoList(); len(repos) > 1 {
+		sums := make([]repoSummary, len(repos))
+		var wg sync.WaitGroup
+		sem := make(chan struct{}, 8)
+		for i, rr := range repos {
+			sums[i] = repoSummary{Path: rr.Path, Name: rr.Name}
+			if rr.Path == ref.Path {
+				sums[i].Branch, sums[i].Changes, sums[i].Ahead, sums[i].Behind = st.Branch, len(st.Changes), st.Ahead, st.Behind
+				continue
+			}
+			wg.Add(1)
+			go func(i int, rr repoRef) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+				if o, err := s.gitRepo(rr).Status(r.Context()); err != nil {
+					sums[i].Error = err.Error()
+				} else {
+					sums[i].Branch, sums[i].Changes, sums[i].Ahead, sums[i].Behind = o.Branch, len(o.Changes), o.Ahead, o.Behind
+				}
+			}(i, rr)
+		}
+		wg.Wait()
+		resp["repos"] = sums
+	}
+	writeJSON(w, resp)
 }
 
 func (s *Server) gitDiff(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
-	orig, mod, binary, err := s.repo().Diff(r.Context(), q.Get("path"), q.Get("staged") == "1")
+	repo, _, rel, err := s.owner(q.Get("path"))
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	orig, mod, binary, err := repo.Diff(r.Context(), rel, q.Get("staged") == "1")
 	if err != nil {
 		fail(w, http.StatusBadRequest, err.Error())
 		return
@@ -755,7 +867,12 @@ func (s *Server) gitDiff(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) gitBranches(w http.ResponseWriter, r *http.Request) {
-	bs, err := s.repo().Branches(r.Context())
+	repo, _, err := s.repoAt(r.URL.Query().Get("repo"))
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	bs, err := repo.Branches(r.Context())
 	if err != nil {
 		fail(w, http.StatusBadRequest, err.Error())
 		return
@@ -764,17 +881,25 @@ func (s *Server) gitBranches(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) gitLines(w http.ResponseWriter, r *http.Request) {
-	lc, err := s.repo().LineChanges(r.Context(), r.URL.Query().Get("path"))
-	if err != nil {
-		writeJSON(w, map[string]any{"changes": []any{}}) // untracked / not a repo: no markers
-		return
+	repo, _, rel, err := s.owner(r.URL.Query().Get("path"))
+	if err == nil {
+		var lc []git.LineChange
+		if lc, err = repo.LineChanges(r.Context(), rel); err == nil {
+			writeJSON(w, map[string]any{"changes": nonNil(lc)})
+			return
+		}
 	}
-	writeJSON(w, map[string]any{"changes": nonNil(lc)})
+	writeJSON(w, map[string]any{"changes": []any{}}) // untracked / not a repo: no markers
 }
 
 // gitPatch is the whole pending change as unified diffs, for reviewing on a phone.
 func (s *Server) gitPatch(w http.ResponseWriter, r *http.Request) {
-	patch, truncated, err := s.repo().Patch(r.Context(), 400<<10)
+	repo, _, err := s.repoAt(r.URL.Query().Get("repo"))
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	patch, truncated, err := repo.Patch(r.Context(), 400<<10)
 	if err != nil {
 		fail(w, http.StatusBadRequest, err.Error())
 		return
@@ -789,6 +914,7 @@ func (s *Server) gitWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
+		Repo      string   `json:"repo"`
 		Paths     []string `json:"paths"`
 		Message   string   `json:"message"`
 		Untracked bool     `json:"untracked"` // discard: also delete untracked files
@@ -799,28 +925,63 @@ func (s *Server) gitWrite(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "bad request body")
 		return
 	}
-	repo, ctx := s.repo(), r.Context()
-	var err error
+	ctx := r.Context()
+	op := r.PathValue("op")
 	resp := map[string]any{"ok": true}
-	switch r.PathValue("op") {
-	case "stage":
-		err = repo.Stage(ctx, req.Paths)
-	case "unstage":
-		err = repo.Unstage(ctx, req.Paths)
-	case "discard":
-		err = repo.Discard(ctx, req.Paths, req.Untracked)
-	case "commit":
-		var hash string
-		hash, err = repo.Commit(ctx, req.Message)
-		resp["commit"] = hash
-	case "switch":
-		err = repo.Switch(ctx, req.Branch, req.Create)
-	case "fetch":
-		err = repo.Fetch(ctx)
-	case "pull":
-		err = repo.Pull(ctx)
-	case "push":
-		err = repo.Push(ctx)
+	var err error
+	switch op {
+	case "stage", "unstage", "discard":
+		// Paths are folder-relative; each goes to the repository that holds it.
+		groups := map[string][]string{}
+		repos := map[string]git.Repo{}
+		for _, p := range req.Paths {
+			repo, ref, rel, e := s.owner(p)
+			if e != nil {
+				err = e
+				break
+			}
+			groups[ref.Path] = append(groups[ref.Path], rel)
+			repos[ref.Path] = repo
+		}
+		if err == nil && len(req.Paths) == 0 {
+			_, _, err = s.repoAt(req.Repo)
+		}
+		for k, ps := range groups {
+			if err != nil {
+				break
+			}
+			switch op {
+			case "stage":
+				err = repos[k].Stage(ctx, ps)
+			case "unstage":
+				err = repos[k].Unstage(ctx, ps)
+			default:
+				err = repos[k].Discard(ctx, ps, req.Untracked)
+			}
+		}
+		if err == nil && len(req.Paths) == 0 {
+			err = errors.New("no paths given")
+		}
+	case "commit", "switch", "fetch", "pull", "push":
+		repo, _, e := s.repoAt(req.Repo)
+		if e != nil {
+			err = e
+			break
+		}
+		switch op {
+		case "commit":
+			var hash string
+			hash, err = repo.Commit(ctx, req.Message)
+			resp["commit"] = hash
+		case "switch":
+			err = repo.Switch(ctx, req.Branch, req.Create)
+		case "fetch":
+			err = repo.Fetch(ctx)
+		case "pull":
+			err = repo.Pull(ctx)
+		default:
+			err = repo.Push(ctx)
+		}
 	default:
 		fail(w, http.StatusNotFound, "unknown git operation")
 		return
@@ -1112,6 +1273,20 @@ func (s *Server) agentStart(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("started agent %s in %s", name, s.root)
 	writeJSON(w, sess.Info())
+}
+
+// chatter is the model in use (nil: none configured); Settings can change it.
+func (s *Server) chatter() docs.Chatter {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.llm
+}
+
+// SetLLM switches the model, e.g. after Settings were saved.
+func (s *Server) SetLLM(c docs.Chatter) {
+	s.mu.Lock()
+	s.llm = c
+	s.mu.Unlock()
 }
 
 func modelName(c docs.Chatter) string {

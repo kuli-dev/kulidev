@@ -14,6 +14,17 @@
   package another project provides), declared dependencies, and deploy/config files that
   refer to another project (compose services, Kubernetes, env URLs). Every arrow opens
   the file:line evidence. Nested repositories are listed with their own .gitignore.
+- **Systems** also matches HTTP calls to routes: FastAPI/Flask, Express/Nest, Go
+  (net/http, gin, echo), Spring and Laravel routes against the API paths other projects
+  call, segment by segment; each call shows the route it reaches. Projects are found up
+  to six folders deep.
+- **Git in a folder of several repositories**: the Changes panel lists every repository
+  with its branch and change count; pick one to commit, switch branches, pull or push.
+  Diffs, gutter markers and staging work for files in any of them.
+- **Settings** (gear at the bottom left, Ctrl+,): the AI model connection (base URL,
+  model, API key, reasoning effort, max tokens) with Test connection, applied without a
+  restart and saved per user (the key is never shown again); light/dark/system theme;
+  folder actions; how KuliDev is running. Only on the computer running KuliDev.
 - **Switch folders** with Ctrl+R or the folder name in the status bar: recent folders,
   filtered as you type.
 - Windows: no more console windows flashing up when KuliDev runs git.

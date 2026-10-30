@@ -28,8 +28,9 @@ func TestFolderOfRepos(t *testing.T) {
 	put(t, root, "shop-api/shop_core/__init__.py", "")
 	put(t, root, "shop-api/shop_core/models.py", "class Order:\n    pass\n")
 	put(t, root, "shop-api/app/main.py", "from shop_core.models import Order\n")
+	put(t, root, "shop-api/app/orders.py", "router = APIRouter(prefix=\"/orders\")\n\n@router.get(\"/{order_id}/items\")\ndef items(order_id: int):\n    return []\n\n@app.get(\"/health\")\ndef health():\n    return 1\n")
 	put(t, root, "shop-web/package.json", `{"name": "shop-web", "dependencies": {"react": "19"}}`+"\n")
-	put(t, root, "shop-web/src/api.ts", "export const base = process.env.API_URL;\n")
+	put(t, root, "shop-web/src/api.ts", "export const base = process.env.API_URL;\nexport const items = (id: string) => fetch(`${base}/api/v1/orders/${id}/items`);\nexport const up = () => fetch(`${base}/health`);\n")
 	put(t, root, "shop-web/.env.example", "SHOP_API_URL=http://localhost:8000\nDISABLE_WORKER=1\n# worker: not used here\n")
 	put(t, root, "worker/pyproject.toml", "[project]\nname = \"worker\"\ndependencies = [\n  # \"shop-core @ file:///old\",\n  \"shop-core>=1.0\",\n]\n")
 	put(t, root, "worker/run.py", "import os\nfrom shop_core import models\n")
@@ -72,6 +73,14 @@ func TestFolderOfRepos(t *testing.T) {
 		t.Errorf("missing link %s -%s-> %s; links: %+v", from, kind, to, m.Links)
 	}
 	has("worker", "shop-api", Imports, "worker/run.py")
+	has("shop-web", "shop-api", CallsAPI, "shop-web/src/api.ts")
+	for _, l := range m.Links {
+		if l.Kind == CallsAPI {
+			if l.Count != 1 || !strings.Contains(l.Evidence[0].Target, "shop-api/app/orders.py:3") {
+				t.Errorf("calls API = %+v (only the items call, not /health)", l)
+			}
+		}
+	}
 	has("worker", "shop-api", DependsOn, "worker/pyproject.toml")
 	has("shop-web", "shop-api", Config, "shop-web/.env.example")
 	has("", "shop-api", Config, "docker-compose.yml")

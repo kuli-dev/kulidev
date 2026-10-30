@@ -105,7 +105,7 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 				model = c
 				fmt.Fprintf(os.Stderr, "kuli: ask uses model %s\n", c.Model())
 			} else {
-				fmt.Fprintf(os.Stderr, "kuli: %v — the Ask page will be disabled\n", err)
+				fmt.Fprintf(os.Stderr, "kuli: %v — using the model from Settings, if one is saved there\n", err)
 			}
 
 			// Off the loopback interface every device must pair; locally it's optional.
@@ -142,6 +142,7 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 			}
 			hub := server.NewHost(server.HostOptions{
 				UI: web.FS(), LLM: model, Options: opts, RecentFile: filepath.Join(userStateDir(), "recent.json"),
+				SettingsFile: filepath.Join(userStateDir(), "settings.json"), Version: Version,
 				CanOpen: !remote && devices == nil, // browsing folders is for the local user only
 			})
 			defer hub.Close()

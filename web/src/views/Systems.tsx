@@ -8,9 +8,10 @@ import { ErrorNote } from "./Overview";
 
 const W = 230;
 const H = 74;
-const KINDS = ["imports", "depends on", "configures"] as const;
+const KINDS = ["imports", "calls API", "depends on", "configures"] as const;
 const KIND_TEXT: Record<SysLink["kind"], string> = {
   imports: "imports code from",
+  "calls API": "calls HTTP routes of",
   "depends on": "declares a dependency on",
   configures: "deploy or config files refer to",
 };
@@ -108,7 +109,7 @@ export function SystemsView() {
       <div className="map-head">
         <h1 className="title">Systems</h1>
         <p className="muted small">
-          The projects in this folder and how they connect. Solid arrows: code imports or declared dependencies. Dashed:
+          The projects in this folder and how they connect. Solid arrows: code imports, HTTP calls to another project's routes, or declared dependencies. Dashed:
           deploy and config files that refer to another project. Click anything to see the evidence.
         </p>
       </div>
@@ -239,6 +240,12 @@ function PairLinks({ pair, name }: { pair: Pair; name: (p: string) => string }) 
               <li key={`${e.path}:${e.line}`}>
                 <a href={href.file(e.path, e.line, e.line)}>{e.path}:{e.line}</a>
                 {e.text && <code>{e.text}</code>}
+                {e.target && (
+                  <span className="ev-target">
+                    reaches <a href={href.file(e.target.split(":")[0], +e.target.split(":")[1].split(" ")[0])}>{e.target.split("  ")[0]}</a>
+                    <code>{e.target.split("  ").slice(1).join("  ")}</code>
+                  </span>
+                )}
               </li>
             ))}
           </ul>

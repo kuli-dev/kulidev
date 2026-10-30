@@ -35,12 +35,14 @@ func main() {
 		defer f.Close()
 	}
 
+	// The model comes from Settings unless KULI_LLM_* is set in the environment.
 	var model docs.Chatter
 	if c, err := llm.New(llm.Config{MaxTokens: 2048}.FromEnv()); err == nil {
 		model = c
 	}
 	hub := server.NewHost(server.HostOptions{
 		UI: web.FS(), LLM: model, CanOpen: true, RecentFile: filepath.Join(state, "recent.json"),
+		SettingsFile: filepath.Join(state, "settings.json"), Version: cli.Version,
 		Options: server.Options{Loopback: true, Terminals: runtime.GOOS != "windows"}, // no PTY on Windows yet
 	})
 	defer hub.Close()

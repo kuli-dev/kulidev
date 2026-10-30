@@ -1,22 +1,37 @@
 import { useEffect, useState } from "react";
-import { api, type GitChange, type GitStatus } from "../api";
+import { api, type GitChange, type GitStatus, type RepoSummary } from "../api";
 
 const LABEL: Record<string, string> = { M: "modified", A: "added", D: "deleted", R: "renamed", C: "copied", U: "conflict", "?": "untracked", T: "type changed" };
 
 // Source control, VS Code style: staged and unstaged changes, a commit box, and a diff
 // for every row. Writes go through the user's own git.
-export function ChangesPane({ status, writable, onChanged, onOpenDiff }: {
+export function ChangesPane({ status, writable, onChanged, onOpenDiff, repos, repo, onRepo }: {
   status: GitStatus | null; writable: boolean; onChanged: () => void; onOpenDiff: (path: string, staged: boolean) => void;
+  repos?: RepoSummary[]; repo: string; onRepo: (path: string) => void;
 }) {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<{ text: string; warn?: boolean } | null>(null);
 
   if (!status) return <div className="pane"><h2 className="pane-title">Changes</h2><p className="muted small pad-x">Loading…</p></div>;
+  const picker = repos && repos.length > 1 && (
+    <div className="repo-list" role="listbox" aria-label="Repositories">
+      <h3 className="pane-sub">Repositories</h3>
+      {repos.map((r) => (
+        <button key={r.path} role="option" aria-selected={r.path === repo} className={`repo-row ${r.path === repo ? "on" : ""}`}
+          onClick={() => onRepo(r.path)} title={r.error ?? r.path}>
+          <span className="repo-name">{r.name}</span>
+          <span className="repo-branch">{r.error ? "error" : r.branch}{r.ahead > 0 && ` ↑${r.ahead}`}{r.behind > 0 && ` ↓${r.behind}`}</span>
+          {r.changes > 0 && <span className="repo-count">{r.changes}</span>}
+        </button>
+      ))}
+    </div>
+  );
   if (!status.git) {
     return (
       <div className="pane">
         <h2 className="pane-title">Changes</h2>
+        {picker}
         <p className="muted small pad-x">This folder is not a git repository. Run <code>git init</code> in the terminal to start tracking changes.</p>
       </div>
     );
@@ -61,7 +76,8 @@ export function ChangesPane({ status, writable, onChanged, onOpenDiff }: {
   return (
     <div className="pane changes">
       <h2 className="pane-title">Changes</h2>
-      <BranchBar status={status} writable={writable} busy={busy} run={run} />
+      {picker}
+      <BranchBar key={repo} status={status} writable={writable} busy={busy} run={run} />
       {writable && (
         <form className="commit-box" onSubmit={commit}>
           <textarea value={msg} onChange={(e) => setMsg(e.target.value)} rows={3} placeholder="Commit message (Ctrl+Enter to commit)"

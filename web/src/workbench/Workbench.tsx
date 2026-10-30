@@ -1,10 +1,11 @@
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, type GitStatus, type TermInfo } from "../api";
+import { api, setGitRepo, type GitState, type TermInfo } from "../api";
 import { useLoad } from "../hooks";
 import { clearDefinitionCache } from "../defs";
 import { parse, type Route } from "../router";
 
 import { OverviewView } from "../views/Overview";
+import { SettingsView } from "../views/Settings";
 import { Chat } from "./Chat";
 import type { Cursor } from "./CodeTab";
 import { DocTab } from "./DocTab";
@@ -60,7 +61,21 @@ export function Workbench() {
   const [termOpen, setTermOpen] = useState(false);
   const [termH, setTermH] = useState(280);
   const [termFocus, setTermFocus] = useState<string | undefined>();
-  const [git, setGit] = useState<{ status: GitStatus; writable: boolean } | null>(null);
+  const [git, setGit] = useState<GitState | null>(null);
+  // Which repository Changes works on, when the folder holds several (kept per folder).
+  const repoKey = `kuli.repo.${ov.data?.root ?? ""}`;
+  const [gitRepo, setGitRepoState] = useState("");
+  useEffect(() => {
+    let saved = "";
+    try { saved = localStorage.getItem(repoKey) ?? ""; } catch { /* storage off */ }
+    setGitRepo(saved);
+    setGitRepoState(saved);
+  }, [repoKey]);
+  const chooseRepo = (path: string) => {
+    setGitRepo(path);
+    setGitRepoState(path);
+    try { localStorage.setItem(repoKey, path); } catch { /* storage off */ }
+  };
   // Bumped whenever the git status actually changes, so open diffs re-read both sides.
   const [gitVersion, setGitVersion] = useState(0);
   const refreshGit = useCallback(() => {
@@ -78,7 +93,7 @@ export function Workbench() {
     const t = setInterval(refreshGit, view === "changes" ? 3000 : 10000);
     addEventListener("focus", refreshGit);
     return () => { clearInterval(t); removeEventListener("focus", refreshGit); };
-  }, [refreshGit, view]);
+  }, [refreshGit, view, gitRepo]);
 
   // Terminal/agent sessions, polled for Pulse and for "needs attention" notifications.
   const [terms, setTerms] = useState<TermInfo[] | null>(null);
@@ -234,6 +249,7 @@ export function Workbench() {
       else if (k === "g" && e.shiftKey) { e.preventDefault(); setView("changes"); }
       else if (k === "b") { e.preventDefault(); setView((v) => (v ? null : "explorer")); }
       else if (k === "l") { e.preventDefault(); setChat((c) => !c); }
+      else if (e.key === ",") { e.preventDefault(); openTab({ kind: "settings" }); }
       else if (k === "o" && canSwitch) { e.preventDefault(); setBrowse(true); }
       else if (k === "r" && canSwitch && !e.shiftKey) { e.preventDefault(); setSwitcher(true); }
       else if (k === "w" && e.altKey) { e.preventDefault(); closeTab(active); }
@@ -260,6 +276,8 @@ export function Workbench() {
   const activePath = current?.kind === "file" ? current.path : undefined;
   const files = useMemo(() => tree.data?.files ?? [], [tree.data]);
 
+  const gitChanges = git?.repos ? git.repos.reduce((n, r) => n + r.changes, 0) : git?.status.git ? git.status.changes.length : 0;
+  const activeRepo = git?.repos?.find((r) => r.path === git.repo);
   const activity: { v: View; label: string; icon: () => React.ReactNode }[] = [
     { v: "explorer", label: "Explorer (Ctrl+B)", icon: Icon.files },
     { v: "search", label: "Search (Ctrl+Shift+F)", icon: Icon.search },
@@ -279,8 +297,8 @@ export function Workbench() {
           <button key={a.v} className={`act ${view === a.v ? "on" : ""}`} title={a.label} aria-label={a.label}
             aria-pressed={view === a.v} onClick={() => setView((v) => (v === a.v ? null : a.v))}>
             <a.icon />
-            {a.v === "changes" && git?.status.git && git.status.changes.length > 0 && (
-              <span className="act-badge" aria-label={`${git.status.changes.length} changes`}>{Math.min(git.status.changes.length, 99)}</span>
+            {a.v === "changes" && gitChanges > 0 && (
+              <span className="act-badge" aria-label={`${gitChanges} changes`}>{Math.min(gitChanges, 99)}</span>
             )}
           </button>
         ))}
@@ -290,6 +308,7 @@ export function Workbench() {
             onClick={() => openTab({ kind: "systems" })}><Icon.systems /></button>
         )}
         <span className="act-gap" />
+        <button className="act" title="Settings (Ctrl+,)" aria-label="Settings" onClick={() => openTab({ kind: "settings" })}><Icon.gear /></button>
         <button className={`act ${chat ? "on" : ""}`} title="Ask Kuli (Ctrl+L)" aria-label="Ask Kuli" aria-pressed={chat} onClick={() => setChat((c) => !c)}>
           <Icon.chat />
         </button>
@@ -304,6 +323,7 @@ export function Workbench() {
           {view === "issues" && <IssuesPane onOpen={openFile} />}
           {view === "changes" && (
             <ChangesPane status={git?.status ?? null} writable={git?.writable ?? false} onChanged={refreshGit}
+              repos={git?.repos} repo={git?.repo ?? ""} onRepo={chooseRepo}
               onOpenDiff={(path, staged) => { openTab({ kind: "diff", path, staged }); if (narrow) setView(null); }} />
           )}
           {view === "agents" && <AgentsPane onStart={startAgent} />}
@@ -354,6 +374,9 @@ export function Workbench() {
               <SystemsView />
             </Suspense>
           )}
+          {current?.kind === "settings" && (
+            <SettingsView root={ov.data?.root} onRescan={rescan} onOpenFolder={() => setBrowse(true)} onSaved={ov.reload} />
+          )}
           {current?.kind === "doc" && <DocTab name={current.name} />}
           {current?.kind === "review" && <ReviewTab git={git?.status ?? null} writable={git?.writable ?? false} onChanged={refreshGit} />}
           {current?.kind === "diff" && (
@@ -399,7 +422,13 @@ export function Workbench() {
         ) : (
           <span className="st-repo">{repo}</span>
         )}
-        {ov.data && <span className="st-wide">{ov.data.commit ? ov.data.commit.slice(0, 8) : "no commit"}</span>}
+        {activeRepo ? (
+          <button className="st-btn st-wide" onClick={() => setView("changes")} title={`${git?.repos?.length} repositories in this folder`}>
+            {activeRepo.name}: {activeRepo.branch || "no branch"}
+          </button>
+        ) : (
+          ov.data && <span className="st-wide">{git?.status.branch ? `${git.status.branch} ` : ""}{ov.data.commit ? ov.data.commit.slice(0, 8) : "no commit"}</span>
+        )}
         {ov.data?.stale && <span className="st-warn">{narrow ? "Stale" : "New commits since scan"}</span>}
         <button className="st-btn" onClick={rescan} disabled={scan === "busy"}>{scan === "busy" ? "Scanning…" : "Rescan"}</button>
         {scan !== "idle" && scan !== "busy" && <span>{scan}</span>}

@@ -33,6 +33,10 @@ type Host struct {
 	curSt   *store.Store
 	opening sync.Mutex
 
+	settingsFile   string
+	llmFromStartup bool
+	version        string
+
 	jobMu sync.Mutex
 	job   *OpenJob // the latest open, for the progress bar
 }
@@ -61,11 +65,24 @@ type HostOptions struct {
 	CanOpen bool
 	// RecentFile stores recently opened folders (empty: not remembered).
 	RecentFile string
+	// SettingsFile holds what the Settings screen saves. Its model is used unless LLM
+	// was given (by flags or environment at start).
+	SettingsFile string
+	Version      string
 }
 
 // NewHost starts with no workspace open.
 func NewHost(o HostOptions) *Host {
-	return &Host{ui: o.UI, llm: o.LLM, opts: o.Options, canOpen: o.CanOpen && o.Options.Auth == nil, recent: o.RecentFile}
+	h := &Host{ui: o.UI, llm: o.LLM, opts: o.Options, canOpen: o.CanOpen && o.Options.Auth == nil, recent: o.RecentFile,
+		settingsFile: o.SettingsFile, llmFromStartup: o.LLM != nil, version: o.Version}
+	if h.llm == nil && h.settingsFile != "" {
+		if c, err := LLMFromSettings(h.loadSettings().LLM); err == nil {
+			h.llm = c
+		} else {
+			log.Printf("settings: %v", err)
+		}
+	}
+	return h
 }
 
 // Root returns the open workspace's root ("" when none).
@@ -178,7 +195,10 @@ func (h *Host) open(root, dataDir string) (sum store.Summary, err error) {
 			return sum, err
 		}
 	}
-	srv, err := New(root, dataDir, st, h.llm, h.ui, h.opts)
+	h.mu.RLock()
+	model := h.llm
+	h.mu.RUnlock()
+	srv, err := New(root, dataDir, st, model, h.ui, h.opts)
 	if err != nil {
 		st.Close()
 		return sum, err
@@ -227,6 +247,11 @@ func (h *Host) Handler() http.Handler {
 		launcher.HandleFunc("GET /api/fs/list", h.fsList)
 		launcher.HandleFunc("POST /api/workspace/open", h.openHandler)
 		launcher.HandleFunc("POST /api/workspace/close", h.closeHandler)
+		if h.settingsFile != "" {
+			launcher.HandleFunc("GET /api/settings", h.getSettings)
+			launcher.HandleFunc("PUT /api/settings", h.putSettings)
+			launcher.HandleFunc("POST /api/settings/test", h.testSettings)
+		}
 	}
 	// Launcher endpoints exist only when switching is allowed; otherwise the workspace's
 	// own (authenticated) handler answers everything.
@@ -236,7 +261,7 @@ func (h *Host) Handler() http.Handler {
 		files = staticUI(h.ui)
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if h.canOpen && (r.URL.Path == "/api/workspace" || strings.HasPrefix(r.URL.Path, "/api/workspace/") || strings.HasPrefix(r.URL.Path, "/api/fs/")) {
+		if h.canOpen && (r.URL.Path == "/api/workspace" || strings.HasPrefix(r.URL.Path, "/api/workspace/") || strings.HasPrefix(r.URL.Path, "/api/fs/") || r.URL.Path == "/api/settings" || strings.HasPrefix(r.URL.Path, "/api/settings/")) {
 			guarded.ServeHTTP(w, r)
 			return
 		}
