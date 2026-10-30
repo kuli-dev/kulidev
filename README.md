@@ -109,7 +109,7 @@ A VS Code-style workbench over the knowledge graph:
   in the editor margin. It runs your own `git`, so hooks, identity, credentials and config
   apply. Discarding an untracked file asks first, since it deletes it.
 - **Pulse** — built for checking from your phone: each agent's state (*working*, *waiting for
-  you*, *finished*), its last lines of output, and pending changes; **Review** shows every diff
+  you*, *finished*), its last lines of output, a reply box with ↑ ↓ Enter Esc Ctrl+C for its prompts, and pending changes; **Review** shows every diff
   in one scroll with *Commit all* / *Discard all*. Optional notifications when an agent goes
   quiet or exits (needs https or localhost).
 - **Integrated terminal** (**Ctrl+`**): real shells on the server that keep running when

@@ -87,6 +87,8 @@ export const api = {
   terminals: () => call<{ enabled: boolean; terminals: TermInfo[] }>("api/terminals"),
   startTerminal: (cols: number, rows: number) =>
     call<TermInfo>("api/terminals", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cols, rows }) }),
+  termInput: (id: string, data: string) =>
+    call<{ ok: boolean }>(`api/terminals/${q(id)}/input`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ data }) }),
   killTerminal: (id: string) => call<{ ok: boolean }>(`api/terminals/${q(id)}`, { method: "DELETE" }),
   agents: () => call<{ enabled: boolean; agents: AgentInfo[] }>("api/agents"),
   startAgent: (id: string, cols: number, rows: number) =>

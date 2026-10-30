@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { GitStatus, TermInfo } from "../api";
+import { api, type GitStatus, type TermInfo } from "../api";
 import { ago, disableNotifications, enableNotifications, notificationsWanted, stateOf } from "./attention";
 
 const STATE_LABEL = { working: "Working", waiting: "Waiting for you", exited: "Finished" };
@@ -61,7 +61,8 @@ export function PulsePane({ terminals, git, onOpenTerminal, onReview }: {
               {st === "exited" ? `ran ${ago(t.started, now)} ago` : `started ${ago(t.started, now)} ago, last output ${ago(t.lastOutput, now)} ago`}
             </p>
             {t.tail && t.tail.length > 0 && <pre className="tail">{t.tail.join("\n")}</pre>}
-            <button className="btn" onClick={() => onOpenTerminal(t.id)}>{st === "waiting" ? "Answer" : "Open"}</button>
+            {st !== "exited" && <QuickReply id={t.id} />}
+            <button className="btn" onClick={() => onOpenTerminal(t.id)}>Open terminal</button>
           </section>
         );
       })}
@@ -76,6 +77,42 @@ export function PulsePane({ terminals, git, onOpenTerminal, onReview }: {
         </label>
         {notifyMsg && <p className="notice warn">{notifyMsg}</p>}
       </div>
+    </div>
+  );
+}
+
+// Keys a coding agent's prompts and menus need, sent straight to its terminal.
+const KEYS: { label: string; seq: string; title: string }[] = [
+  { label: "↑", seq: "\x1b[A", title: "Up" },
+  { label: "↓", seq: "\x1b[B", title: "Down" },
+  { label: "Enter", seq: "\r", title: "Enter" },
+  { label: "Esc", seq: "\x1b", title: "Escape" },
+  { label: "Ctrl+C", seq: "\x03", title: "Interrupt" },
+];
+
+function QuickReply({ id }: { id: string }) {
+  const [text, setText] = useState("");
+  const [err, setErr] = useState("");
+  const send = async (data: string) => {
+    setErr("");
+    try {
+      await api.termInput(id, data);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
+  return (
+    <div className="quick-reply">
+      <form onSubmit={(e) => { e.preventDefault(); if (text) { send(text + "\r"); setText(""); } }}>
+        <input value={text} onChange={(e) => setText(e.target.value)} placeholder="Reply" aria-label="Reply to the agent" />
+        <button className="btn" disabled={!text}>Send</button>
+      </form>
+      <div className="keys-row">
+        {KEYS.map((k) => (
+          <button key={k.label} type="button" className="key-btn" title={k.title} aria-label={`Send ${k.title}`} onClick={() => send(k.seq)}>{k.label}</button>
+        ))}
+      </div>
+      {err && <p className="notice warn">{err}</p>}
     </div>
   );
 }

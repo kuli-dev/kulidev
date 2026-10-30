@@ -120,6 +120,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/terminals", s.termStart)
 	mux.HandleFunc("DELETE /api/terminals/{id}", s.termKill)
 	mux.HandleFunc("GET /api/terminals/{id}/ws", s.termSocket)
+	mux.HandleFunc("POST /api/terminals/{id}/input", s.termInput)
 	mux.HandleFunc("GET /api/auth/state", s.authState)
 	mux.HandleFunc("POST /api/pair", s.pair)
 	mux.HandleFunc("POST /api/logout", s.logout)
@@ -936,6 +937,35 @@ func (s *Server) termKill(w http.ResponseWriter, r *http.Request) {
 	}
 	if !s.terms.Kill(r.PathValue("id")) {
 		fail(w, http.StatusNotFound, "no such terminal")
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+// termInput sends keystrokes to a session without a terminal attached — how Pulse
+// answers an agent from a phone.
+func (s *Server) termInput(w http.ResponseWriter, r *http.Request) {
+	if !s.termsOr403(w) {
+		return
+	}
+	sess := s.terms.Get(r.PathValue("id"))
+	if sess == nil {
+		fail(w, http.StatusNotFound, "no such terminal")
+		return
+	}
+	var req struct {
+		Data string `json:"data"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req); err != nil || req.Data == "" {
+		fail(w, http.StatusBadRequest, "data required")
+		return
+	}
+	if sess.Info().Exited {
+		fail(w, http.StatusConflict, "that session has finished")
+		return
+	}
+	if err := sess.Write([]byte(req.Data)); err != nil {
+		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, map[string]bool{"ok": true})

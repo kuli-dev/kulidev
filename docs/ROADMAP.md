@@ -54,7 +54,7 @@ the workspace, IDE and remote features are layered on top.
 - [x] Devices view: list, revoke, sign out, invite another device with a QR code
 - [ ] Verify and tune the phone layout on real devices (responsive rules exist, untested on a phone)
 - [x] Pulse: agent state (working / waiting / finished) with rendered output tail; Review with commit/discard all; notifications via a service worker
-- [ ] Answer an agent's question from Pulse without opening the full terminal
+- [x] Answer an agent from Pulse: reply box plus ↑ ↓ Enter Esc Ctrl+C keys
 
 ## Later
 - Desktop shell (Tauri), mobile PWA, remote workspaces + device pairing, Postgres for teams,

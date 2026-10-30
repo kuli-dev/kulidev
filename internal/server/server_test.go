@@ -358,6 +358,20 @@ func TestTerminals(t *testing.T) {
 		got.Write(b)
 	}
 
+	// Input without a socket (Pulse answering an agent) reaches the shell.
+	in, _ := http.NewRequest("POST", ts.URL+"/api/terminals/"+id+"/input", strings.NewReader(`{"data":"echo via-$((40+1))-input\r"}`))
+	in.Header.Set("X-Kuli-Request", "1")
+	if resp, err := http.DefaultClient.Do(in); err != nil || resp.StatusCode != 200 {
+		t.Fatalf("input = %v %v", resp, err)
+	}
+	for !strings.Contains(got.String(), "via-41-input") {
+		_, b, err := c.Read(ctx)
+		if err != nil {
+			t.Fatalf("read after input: %v (got %q)", err, got.String())
+		}
+		got.Write(b)
+	}
+
 	req, _ := http.NewRequest("DELETE", ts.URL+"/api/terminals/"+id, nil)
 	req.Header.Set("X-Kuli-Request", "1")
 	resp, _ := http.DefaultClient.Do(req)

@@ -224,9 +224,13 @@ ul.plain { list-style: none; padding: 0; margin: 0; }
 .g-R, .g-C { color: var(--lang-4); }
 
 /* Pulse */
-.pulse-card { margin: 0 10px 10px; padding: 10px 12px; border: 1px solid var(--line); background: var(--concrete); display: grid; gap: 6px; justify-items: start; }
+.pulse-card {
+  margin: 0 10px 10px; padding: 10px 12px; border: 1px solid var(--line); background: var(--concrete);
+  display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; justify-items: start; /* never wider than the pane */
+}
 .pulse-card p { margin: 0; }
-.pulse-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; }
+.pulse-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 4px 8px; width: 100%; min-width: 0; }
+.pulse-head strong { min-width: 0; overflow-wrap: anywhere; }
 .agent-waiting { box-shadow: inset 4px 0 0 var(--safety); }
 .agent-exited { opacity: 0.85; }
 .chip { font-size: 11px; font-weight: 700; padding: 1px 6px; border-radius: 2px; white-space: nowrap; }
@@ -235,6 +239,12 @@ ul.plain { list-style: none; padding: 0; margin: 0; }
 .chip-exited { background: var(--line); color: var(--ink); }
 .tail { margin: 0; width: 100%; max-height: 8.5em; overflow: auto; font-family: var(--mono); font-size: 11px; line-height: 1.45; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--steel); }
 .notify { padding-top: 8px; padding-bottom: 16px; }
+.quick-reply { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.quick-reply form { display: flex; gap: 6px; }
+.quick-reply input { flex: 1; min-width: 0; width: 0; /* inputs default to ~20ch; let flex size it */ font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 2px; background: var(--surface); color: var(--ink); }
+.keys-row { display: flex; flex-wrap: wrap; gap: 4px; }
+.key-btn { font: inherit; font-size: 12px; min-width: 36px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 3px; background: var(--surface); color: var(--ink); cursor: pointer; }
+.key-btn:active { background: var(--safety); color: #1e2a2f; }
 .notify label { display: flex; gap: 6px; align-items: center; }
 
 /* Review */
