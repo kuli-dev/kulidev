@@ -371,7 +371,7 @@ function Canvas({ flow, readOnly, onChange }: { flow: Flow; readOnly?: boolean; 
             if (kind === "group") addGroup(at);
             else addNode(kind as Shape, at);
           }}>
-          <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypesMemo} connectionMode={ConnectionMode.Loose} fitView fitViewOptions={{ padding: 0.3, maxZoom: 1.2 }}
+          <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypesMemo} connectionMode={ConnectionMode.Loose} fitView fitViewOptions={{ padding: 0.15, maxZoom: 1.2 }} minZoom={0.1}
             nodesDraggable={!readOnly} nodesConnectable={!readOnly} elementsSelectable deleteKeyCode={readOnly ? null : ["Delete", "Backspace"]}
             onNodesChange={(ch: NodeChange[]) => setNodes((n) => applyNodeChanges(ch.filter((c) => c.type !== "remove"), n))}
             onEdgesChange={(ch: EdgeChange[]) => setEdges((e) => applyEdgeChanges(ch.filter((c) => c.type !== "remove"), e))}

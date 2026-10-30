@@ -12,11 +12,23 @@ Every fact KuliDev records points back to the file and line that proves it. No v
 
 > *kuli* (Indonesian): labourer. As in "kuli coding" — what we call ourselves at 2 a.m.
 
+![Systems: the services in a folder of repositories and how they use each other, each link with the line that shows it](docs/screenshots/systems-services.png)
+
+| | |
+|---|---|
+| ![Welcome](docs/screenshots/welcome.png) **Open a folder of repositories.** KuliDev reads them once: projects, services, languages and where to start. | ![Projects](docs/screenshots/systems-projects.png) **How the projects connect.** Imports, HTTP calls, declared dependencies and deploy config, each with the code that proves it. |
+| ![System overview](docs/screenshots/docs-system-overview.png) **Docs that cite the code.** A System overview for the whole folder, documents per project; no model needed for the facts. | ![Markdown and Mermaid](docs/screenshots/markdown-mermaid.png) **Markdown with Mermaid**, previewed as you type. |
+| ![Diagram editor](docs/screenshots/diagram-editor.png) **Edit diagrams visually**: drag shapes, connect, group into subgraphs; the Mermaid code follows. | ![Editor and terminal](docs/screenshots/editor-terminal.png) **A full workbench**: editor, Git per repository, terminal, coding agents with the knowledge graph attached. |
+
+<sub>Screenshots: a small demo system (an API with a worker, a Next.js storefront, a shared library and Kubernetes config).</sub>
+
 ## Status
 
-Early. **v0.1 is the knowledge engine**: scan, search and dependency queries from the CLI,
-an MCP server so coding agents can use the same knowledge, DocsMana handover docs and
-`kuli ask` for cited answers, and a web UI (`kuli serve`). What's next is in [docs/ROADMAP.md](docs/ROADMAP.md).
+**v0.3**: the knowledge engine (CLI, MCP server for coding agents, cited answers and docs),
+the workbench in a desktop app for Windows and macOS or any browser, folders of several
+repositories with their services and how they connect, Git per repository, terminal and
+agents (Claude Code, Codex, Cursor), and access from your phone. What's next is in
+[ROADMAP.md](ROADMAP.md); what changed is in [CHANGELOG.md](CHANGELOG.md).
 
 ## Desktop app
 
@@ -195,6 +207,8 @@ Every answer warns the agent when `HEAD` has moved since the last scan.
 | **Parsed with Tree-sitter** | Go, Python, JavaScript, TypeScript/TSX, Java, PHP — functions, methods, classes, structs, interfaces, types, enums, Go package vars/consts, imports, **doc comments & docstrings** |
 | **Import resolution** | Go modules (multi-module), Python absolute/relative/namespace packages, JS/TS relative, `index.*`, `package.json` entry points, ESM `.js→.ts`, `@/` `~/` aliases, Java packages under any source root (static and on-demand imports), PHP PSR-4 from `composer.json` or Composer's generated autoload map, `require`/`include` incl. `__DIR__` |
 | **Detected** | Dockerfile, Compose, Kubernetes YAML, kustomize, Helm, Terraform, GitHub Actions, Jenkins, GitLab CI, SQL migrations, dependency manifests |
+| **Folders of projects** | each repository or app found (up to six folders deep) and labelled service, front end, library or infrastructure; links between them from imports (incl. packages another project provides), HTTP calls matched to routes (FastAPI/Flask, Express/Nest, Go, Spring, Laravel), declared dependencies and deploy/config references |
+| **Services** | docker-compose services, Kubernetes workloads (dev/staging/prod overlays merged) and Dockerfile images: API, worker, cron job, job, front end, or a backing database/cache/queue/storage/proxy; which project's code each runs; who depends on or calls whom |
 | **Storage** | One SQLite file; FTS5 with stemming over names, docs and body words; git-ignored by default |
 
 ## Design principles

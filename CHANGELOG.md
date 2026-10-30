@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.2 (2026-10-31)
+
+Microservices: what gets deployed and run, and how it connects.
 
 - **Microservices**: KuliDev finds what actually gets deployed and run — docker-compose
   services, Kubernetes workloads (Deployments, StatefulSets, CronJobs, Jobs; one service
@@ -13,6 +15,11 @@
   service's config naming another, Kubernetes Service names included); click for where
   it is defined. Shown for a single repository with several services too.
 - **Project roles**: service, front end, library or infrastructure.
+- Fixed: the diagram editor could not zoom out far enough to fit a wide diagram (stuck at
+  half size); a Next.js app deployed from another repository's Kubernetes files was
+  labelled an API; short project names (`web`) were not matched to the images that run
+  them.
+- README: screenshots.
 - The **System overview** gets a Services section (table, backing services, how they
   use each other), every row citing its definition.
 

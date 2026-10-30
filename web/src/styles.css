@@ -684,7 +684,7 @@ figure.mmd { margin: 1.2rem 0; padding: 12px; border: 1px solid var(--line); bor
 .fc-toolbar select { font: inherit; font-size: 12px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; padding: 2px 4px; }
 .fc-palette { display: flex; flex-wrap: wrap; gap: 6px; }
 .fc-main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 210px; }
-.fc-flow { min-height: 0; }
+.fc-flow { min-height: 0; min-width: 0; position: relative; overflow: hidden; } /* the canvas must not reach under the side panel, or "fit" centres off-screen */
 .fc-props { padding: 10px; border-left: 1px solid var(--line); background: var(--chrome); display: grid; gap: 10px; align-content: start; overflow: auto; }
 .fc-props h3 { margin: 0; font-size: 13px; }
 .fc-props label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; }

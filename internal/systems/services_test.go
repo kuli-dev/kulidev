@@ -85,11 +85,12 @@ spec:
                 - name: API
                   value: http://shop-api-svc.default.svc.cluster.local:8000
 `,
-		"infra/terraform/main.tf":  strings.Repeat("resource \"x\" \"y\" {}\n", 40),
-		"mailer/go.mod":            "module example.com/mailer\n",
-		"mailer/main.go":           "package main\nfunc main() {}\n",
-		"mailer/Dockerfile":        "FROM golang\nEXPOSE 2525\n",
-		"mailer/Dockerfile.worker": "FROM golang\nCMD [\"/mailer\", \"worker\"]\n",
+		"infra/terraform/main.tf":        strings.Repeat("resource \"x\" \"y\" {}\n", 40),
+		"infra/web/prod/deployment.yaml": "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  name: storefront\nspec:\n  template:\n    spec:\n      containers:\n        - name: web\n          image: registry.local/web:2\n          ports: [{containerPort: 3000}]\n",
+		"mailer/go.mod":                  "module example.com/mailer\n",
+		"mailer/main.go":                 "package main\nfunc main() {}\n",
+		"mailer/Dockerfile":              "FROM golang\nEXPOSE 2525\n",
+		"mailer/Dockerfile.worker":       "FROM golang\nCMD [\"/mailer\", \"worker\"]\n",
 	}
 	for p, b := range files {
 		os.MkdirAll(filepath.Join(root, filepath.Dir(p)), 0o755)
@@ -110,7 +111,7 @@ spec:
 	}
 	want := map[string]string{ // name → kind@code project
 		"api": "api@shop", "order-consumer": "worker@shop", "db": "database@", "mq": "queue@", "web": "frontend@web",
-		"shop-api": "api@shop", "shop-nightly-report": "cronjob@shop", "mailer": "api@mailer", "mailer-worker": "worker@mailer",
+		"shop-api": "api@shop", "shop-nightly-report": "cronjob@shop", "storefront": "frontend@web", "mailer": "api@mailer", "mailer-worker": "worker@mailer",
 	}
 	for n, w := range want {
 		s, ok := got[n]

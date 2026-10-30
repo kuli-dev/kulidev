@@ -222,14 +222,19 @@ func (sb *svcBuilder) projectOfDir(dir string) string {
 // else the project of the file that deploys it.
 func (sb *svcBuilder) codeProject(image, name, deployedFrom string) string {
 	hay := strings.ToLower(image + " " + name)
+	words := map[string]bool{}
+	for _, w := range regexp.MustCompile(`[a-z0-9]+`).FindAllString(hay, -1) {
+		words[w] = true
+	}
 	best, bestLen := "", 0
 	for _, p := range sb.b.projects {
 		n := strings.ToLower(p.Name)
-		if p.Path == "" || len(n) < 4 {
+		if p.Path == "" {
 			continue
 		}
 		for _, v := range []string{n, strings.ReplaceAll(n, "_", "-"), strings.ReplaceAll(n, "-", "_")} {
-			if strings.Contains(hay, v) && len(v) > bestLen {
+			// Long names may appear inside others (nexus-backend-app); short ones only as a word.
+			if (len(v) >= 4 && strings.Contains(hay, v) || words[v]) && len(v) > bestLen {
 				best, bestLen = p.Path, len(v)
 			}
 		}
@@ -483,7 +488,7 @@ func (sb *svcBuilder) kubernetes(file string) {
 		}
 		def.Kind = fixed
 		if def.Kind == "" {
-			def.Kind = sb.kindFor(def.Image, def.Ports, name, false)
+			def.Kind = sb.kindFor(def.Image, def.Ports, name, def.Project != "" && sb.isFrontendDir(def.Project))
 		}
 		sb.add(name, def)
 	}
