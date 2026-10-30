@@ -1,4 +1,4 @@
-module github.com/kulidev/kulidev
+module github.com/kuli-dev/kulidev
 
 go 1.27.3
 

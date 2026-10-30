@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/kulidev/kulidev/internal/cli"
+	"github.com/kuli-dev/kulidev/internal/cli"
 )
 
 func main() {

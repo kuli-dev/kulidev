@@ -9,9 +9,9 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kulidev/kulidev/internal/report"
-	"github.com/kulidev/kulidev/internal/scan"
-	"github.com/kulidev/kulidev/internal/store"
+	"github.com/kuli-dev/kulidev/internal/report"
+	"github.com/kuli-dev/kulidev/internal/scan"
+	"github.com/kuli-dev/kulidev/internal/store"
 )
 
 const instructions = `KuliDev has pre-indexed this repository into a knowledge graph of files,

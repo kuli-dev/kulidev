@@ -4,7 +4,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/kulidev/kulidev/internal/parse"
+	"github.com/kuli-dev/kulidev/internal/parse"
 )
 
 type langInfo struct {

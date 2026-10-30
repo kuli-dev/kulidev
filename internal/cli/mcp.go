@@ -7,8 +7,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/kulidev/kulidev/internal/mcpserver"
-	"github.com/kulidev/kulidev/internal/store"
+	"github.com/kuli-dev/kulidev/internal/mcpserver"
+	"github.com/kuli-dev/kulidev/internal/store"
 )
 
 func newMCPCmd(o *options) *cobra.Command {

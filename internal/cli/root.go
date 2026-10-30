@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/kulidev/kulidev/internal/store"
+	"github.com/kuli-dev/kulidev/internal/store"
 )
 
 // Version is set at build time via -ldflags.

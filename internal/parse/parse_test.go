@@ -3,7 +3,7 @@ package parse
 import (
 	"testing"
 
-	"github.com/kulidev/kulidev/internal/model"
+	"github.com/kuli-dev/kulidev/internal/model"
 )
 
 func parse(t *testing.T, g, src string) ([]model.Symbol, []model.Import) {

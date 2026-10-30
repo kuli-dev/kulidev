@@ -13,7 +13,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/kulidev/kulidev/internal/scan"
+	"github.com/kuli-dev/kulidev/internal/scan"
 )
 
 //go:embed schema.sql

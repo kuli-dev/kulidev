@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/kulidev/kulidev/internal/scan"
+	"github.com/kuli-dev/kulidev/internal/scan"
 )
 
 func writeTree(t *testing.T, root string, files map[string]string) {

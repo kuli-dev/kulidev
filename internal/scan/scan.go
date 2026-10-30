@@ -12,8 +12,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kulidev/kulidev/internal/model"
-	"github.com/kulidev/kulidev/internal/parse"
+	"github.com/kuli-dev/kulidev/internal/model"
+	"github.com/kuli-dev/kulidev/internal/parse"
 )
 
 // MaxParseBytes is the largest file that gets parsed; bigger files are only counted.

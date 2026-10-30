@@ -9,7 +9,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/kulidev/kulidev/internal/store"
+	"github.com/kuli-dev/kulidev/internal/store"
 )
 
 func TestTools(t *testing.T) {

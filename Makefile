@@ -1,5 +1,5 @@
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS := -s -w -X github.com/kulidev/kulidev/internal/cli.Version=$(VERSION)
+LDFLAGS := -s -w -X github.com/kuli-dev/kulidev/internal/cli.Version=$(VERSION)
 
 .PHONY: build test lint clean
 

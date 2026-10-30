@@ -11,7 +11,7 @@ import (
 	tspy "github.com/tree-sitter/tree-sitter-python/bindings/go"
 	tsts "github.com/tree-sitter/tree-sitter-typescript/bindings/go"
 
-	"github.com/kulidev/kulidev/internal/model"
+	"github.com/kuli-dev/kulidev/internal/model"
 )
 
 // Grammar identifiers accepted by Parser.Parse.

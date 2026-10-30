@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kulidev/kulidev/internal/store"
+	"github.com/kuli-dev/kulidev/internal/store"
 )
 
 // Stats renders a knowledge-base summary for terminals and agents alike.
