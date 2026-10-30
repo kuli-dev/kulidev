@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0
 
 - **Java and PHP**: definitions with Javadoc/PHPDoc; Java imports resolved by package path
   under any source root; PHP `use` resolved through composer.json PSR-4 maps or Composer's
