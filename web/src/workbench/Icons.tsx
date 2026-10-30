@@ -11,6 +11,7 @@ export const Icon = {
   agent: () => (<svg viewBox="0 0 24 24" width="24" height="24" {...P}><rect x="5" y="8" width="14" height="11" rx="2" /><path d="M12 4v4M9 13h.01M15 13h.01M9.5 16.5h5" /></svg>),
   devices: () => (<svg viewBox="0 0 24 24" width="24" height="24" {...P}><rect x="3" y="5" width="13" height="10" rx="1" /><path d="M7 19h5" /><rect x="15" y="9" width="6" height="11" rx="1.5" /></svg>),
   git: () => (<svg viewBox="0 0 24 24" width="24" height="24" {...P}><circle cx="6" cy="5" r="2" /><circle cx="6" cy="19" r="2" /><circle cx="18" cy="8" r="2" /><path d="M6 7v10M18 10c0 4-6 3-11.5 7" /></svg>),
+  pulse: () => (<svg viewBox="0 0 24 24" width="24" height="24" {...P}><path d="M3 12h4l2-5 4 10 2-5h6" /></svg>),
   home: () => (<svg viewBox="0 0 24 24" width="24" height="24" {...P}><path d="M4 11 12 4l8 7v9H4z" /><path d="M10 20v-5h4v5" /></svg>),
   close: () => (<svg viewBox="0 0 16 16" width="14" height="14" {...P}><path d="m4 4 8 8M12 4l-8 8" /></svg>),
   chevron: ({ open }: { open: boolean }) => (

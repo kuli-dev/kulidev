@@ -95,9 +95,14 @@ A VS Code-style workbench over the knowledge graph:
   choose *Reload from disk* or *Overwrite with mine*. Writes are atomic, and the knowledge
   graph refreshes in the background. `kuli serve --read-only` turns editing off.
 - **Changes** (**Ctrl+Shift+G**): git status with a count badge, side-by-side diffs (inline on
-  phones), stage / unstage / discard per file or all, and commit (Ctrl+Enter). It runs your own
-  `git`, so hooks, identity and config apply; nothing is pushed for you. Discarding an untracked
-  file asks first, since it deletes it.
+  phones), stage / unstage / discard per file or all, commit (Ctrl+Enter), switch or create
+  branches, fetch, pull (fast-forward only) and push (never forced). Changed lines are marked
+  in the editor margin. It runs your own `git`, so hooks, identity, credentials and config
+  apply. Discarding an untracked file asks first, since it deletes it.
+- **Pulse** — built for checking from your phone: each agent's state (*working*, *waiting for
+  you*, *finished*), its last lines of output, and pending changes; **Review** shows every diff
+  in one scroll with *Commit all* / *Discard all*. Optional notifications when an agent goes
+  quiet or exits (needs https or localhost).
 - **Integrated terminal** (**Ctrl+`**): real shells on the server that keep running when
   you close the panel or the browser; reopening replays their recent output.
 - **Agents**: start Claude Code or Codex in the workspace terminal with KuliDev's MCP

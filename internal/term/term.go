@@ -7,9 +7,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"regexp"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/creack/pty"
 )
@@ -24,6 +28,7 @@ const MaxSessions = 12
 type Session struct {
 	ID      string
 	Title   string
+	Kind    string // "shell" or "agent"
 	Started time.Time
 
 	cmd  *exec.Cmd
@@ -31,6 +36,7 @@ type Session struct {
 
 	mu     sync.Mutex
 	buf    []byte // ring of the last `scrollback` bytes
+	lastIO time.Time
 	subs   map[chan []byte]struct{}
 	exited bool
 	code   int
@@ -38,17 +44,104 @@ type Session struct {
 
 // Info is a session's public state.
 type Info struct {
-	ID       string    `json:"id"`
-	Title    string    `json:"title"`
-	Started  time.Time `json:"started"`
-	Exited   bool      `json:"exited"`
-	ExitCode int       `json:"exitCode"`
+	ID         string    `json:"id"`
+	Title      string    `json:"title"`
+	Kind       string    `json:"kind"`
+	Started    time.Time `json:"started"`
+	LastOutput time.Time `json:"lastOutput"`
+	Exited     bool      `json:"exited"`
+	ExitCode   int       `json:"exitCode"`
+	Tail       []string  `json:"tail,omitempty"` // last lines of output, terminal codes removed
 }
 
 func (s *Session) Info() Info {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return Info{s.ID, s.Title, s.Started, s.exited, s.code}
+	return Info{ID: s.ID, Title: s.Title, Kind: s.Kind, Started: s.Started, LastOutput: s.lastIO,
+		Exited: s.exited, ExitCode: s.code, Tail: tailLines(s.buf, 6)}
+}
+
+var (
+	// csiRe matches control sequences; the final byte says what they do.
+	csiRe = regexp.MustCompile(`^\x1b\[([0-?]*)[ -/]*([@-~])`) // params: digits ; < = > ?
+	// otherEscRe matches OSC strings (titles, links) and two-byte escapes.
+	otherEscRe = regexp.MustCompile(`^\x1b(\][^\x07\x1b]*(\x07|\x1b\\)?|[()][0-9A-Za-z]|[=>78MDEc])`)
+)
+
+// tailLines returns the last n non-empty lines a person would see. TUIs such as Claude
+// Code place words with cursor moves (ESC[nG / ESC[nC) and redraw lines with \r, so
+// each line is rendered on a small column model instead of just stripping codes.
+func tailLines(buf []byte, n int) []string {
+	start := max(0, len(buf)-16384)
+	var lines []string
+	for _, raw := range strings.Split(string(buf[start:]), "\n") {
+		if ln := renderLine(raw); strings.TrimSpace(ln) != "" {
+			lines = append(lines, ln)
+		}
+	}
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return lines
+}
+
+func renderLine(s string) string {
+	var cells []rune
+	col := 0
+	put := func(r rune) {
+		for len(cells) <= col {
+			cells = append(cells, ' ')
+		}
+		cells[col] = r
+		col++
+	}
+	for len(s) > 0 {
+		switch c := s[0]; {
+		case c == 0x1b:
+			if m := csiRe.FindStringSubmatch(s); m != nil {
+				num := 1
+				if f := strings.Split(m[1], ";"); f[0] != "" && !strings.HasPrefix(f[0], "?") {
+					if v, err := strconv.Atoi(f[0]); err == nil {
+						num = v
+					}
+				}
+				switch m[2] {
+				case "G": // column absolute (1-based)
+					col = min(max(num, 1), 500) - 1
+				case "C": // forward
+					col = min(col+max(num, 1), 500)
+				case "D": // back
+					col = max(col-max(num, 1), 0)
+				case "K": // erase to end of line
+					if m[1] == "" || m[1] == "0" {
+						if col < len(cells) {
+							cells = cells[:col]
+						}
+					} else if m[1] == "2" {
+						cells = cells[:0]
+					}
+				}
+				s = s[len(m[0]):]
+			} else if m := otherEscRe.FindString(s); m != "" {
+				s = s[len(m):]
+			} else {
+				s = s[1:]
+			}
+		case c == '\r':
+			col = 0
+			s = s[1:]
+		case c == '\t':
+			col = (col/8 + 1) * 8
+			s = s[1:]
+		case c < 0x20 || c == 0x7f:
+			s = s[1:]
+		default:
+			r, size := utf8.DecodeRuneInString(s)
+			put(r)
+			s = s[size:]
+		}
+	}
+	return strings.TrimRight(string(cells), " ")
 }
 
 // Subscribe returns the scrollback so far and a channel of new output. The channel
@@ -94,6 +187,7 @@ func (s *Session) pump() {
 		if n > 0 {
 			chunk := append([]byte(nil), b[:n]...)
 			s.mu.Lock()
+			s.lastIO = time.Now()
 			s.buf = append(s.buf, chunk...)
 			if over := len(s.buf) - scrollback; over > 0 {
 				s.buf = append(s.buf[:0], s.buf[over:]...)
@@ -158,12 +252,12 @@ var ErrTooMany = errors.New("too many terminals open; close one first")
 
 // Start opens a new shell session.
 func (m *Manager) Start(cols, rows int) (*Session, error) {
-	return m.StartCommand("", m.shell, cols, rows)
+	return m.StartCommand("", "shell", m.shell, cols, rows)
 }
 
 // StartCommand runs argv on a PTY in the workspace (e.g. a coding agent's CLI).
 // An empty title gets "Terminal N".
-func (m *Manager) StartCommand(title string, argv []string, cols, rows int) (*Session, error) {
+func (m *Manager) StartCommand(title, kind string, argv []string, cols, rows int) (*Session, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	live := 0
@@ -190,7 +284,7 @@ func (m *Manager) StartCommand(title string, argv []string, cols, rows int) (*Se
 		title = fmt.Sprintf("Terminal %d", m.next)
 	}
 	s := &Session{
-		ID: fmt.Sprintf("t%d", m.next), Title: title, Started: time.Now(),
+		ID: fmt.Sprintf("t%d", m.next), Title: title, Kind: kind, Started: time.Now(), lastIO: time.Now(),
 		cmd: cmd, ptmx: ptmx, subs: map[chan []byte]struct{}{},
 	}
 	m.sess[s.ID] = s

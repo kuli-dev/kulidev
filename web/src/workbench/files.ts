@@ -19,13 +19,14 @@ export type Tab =
   | { id: string; kind: "map"; component?: string }
   | { id: string; kind: "doc"; name: string }
   | { id: string; kind: "file"; path: string; from?: number; to?: number }
-  | { id: string; kind: "diff"; path: string; staged: boolean };
+  | { id: string; kind: "diff"; path: string; staged: boolean }
+  | { id: string; kind: "review" };
 
 // A tab before it has an id (Omit applied to each member of the union).
 export type NewTab = Tab extends infer T ? (T extends Tab ? Omit<T, "id"> : never) : never;
 
 export const tabTitle = (t: Tab) =>
-  t.kind === "welcome" ? "Welcome" : t.kind === "map" ? "Map" : t.kind === "doc" ? t.name.replace(/\.md$/, "").replace(/-/g, " ")
+  t.kind === "welcome" ? "Welcome" : t.kind === "map" ? "Map" : t.kind === "review" ? "Review" : t.kind === "doc" ? t.name.replace(/\.md$/, "").replace(/-/g, " ")
     : t.kind === "diff" ? `${t.path.split("/").pop()} (${t.staged ? "staged" : "changes"})` : t.path.split("/").pop()!;
 
 // Subsequence fuzzy match for quick open: rewards consecutive and basename matches.

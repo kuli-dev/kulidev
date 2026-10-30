@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -526,7 +527,10 @@ func TestGitAPI(t *testing.T) {
 	if code, _ := post("stage", `{"paths":["--all"]}`); code != 400 {
 		t.Errorf("option as path = %d", code)
 	}
-	if code, _ := post("push", `{}`); code != 404 {
+	if code, out := post("push", `{}`); code != 400 || !strings.Contains(fmt.Sprint(out["error"]), "no remote") {
+		t.Errorf("push without remote = %d %v", code, out)
+	}
+	if code, _ := post("rebase", `{}`); code != 404 {
 		t.Errorf("unknown op = %d", code)
 	}
 

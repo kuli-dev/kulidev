@@ -166,3 +166,80 @@ func TestInitialCommitUnstage(t *testing.T) {
 		t.Errorf("after unstage on initial commit = %+v", st.Changes)
 	}
 }
+
+func TestBranchesPullPushAndGutter(t *testing.T) {
+	r, dir := repo(t)
+	ctx := context.Background()
+
+	// A bare "remote" in a temp dir: push and pull never leave the machine.
+	remote := t.TempDir()
+	sh(t, remote, "init", "-q", "--bare", "-b", "main")
+	sh(t, dir, "remote", "add", "origin", remote)
+	if err := r.Push(ctx); err != nil {
+		t.Fatalf("first push: %v", err)
+	}
+	if st := mustStatus(t, r); st.Upstream != "origin/main" {
+		t.Errorf("upstream = %q", st.Upstream)
+	}
+
+	if err := r.Switch(ctx, "feature/x", true); err != nil {
+		t.Fatal(err)
+	}
+	bs, _ := r.Branches(ctx)
+	cur := ""
+	for _, b := range bs {
+		if b.Current {
+			cur = b.Name
+		}
+	}
+	if cur != "feature/x" || len(bs) != 2 {
+		t.Errorf("branches = %+v", bs)
+	}
+	for _, bad := range []string{"-f", "a..b", "x y", ""} {
+		if err := r.Switch(ctx, bad, true); err == nil {
+			t.Errorf("branch %q accepted", bad)
+		}
+	}
+	if err := r.Switch(ctx, "main", false); err != nil {
+		t.Fatal(err)
+	}
+
+	// Someone else pushes; we fast-forward.
+	other := t.TempDir()
+	sh(t, other, "clone", "-q", remote, ".")
+	os.WriteFile(filepath.Join(other, "a.txt"), []byte("one\nfrom other\n"), 0o644)
+	sh(t, other, "commit", "-q", "-am", "other")
+	sh(t, other, "push", "-q")
+	if err := r.Fetch(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if st := mustStatus(t, r); st.Behind != 1 {
+		t.Errorf("behind = %d", st.Behind)
+	}
+	if err := r.Pull(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if b, _ := os.ReadFile(filepath.Join(dir, "a.txt")); !strings.Contains(string(b), "from other") {
+		t.Error("pull did not fast-forward")
+	}
+
+	// Gutter: lines 1-2 are "one", "from other"; modify line 2, add 2 lines at the end.
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\nCHANGED\nnew1\nnew2\n"), 0o644)
+	lc, err := r.LineChanges(ctx, "a.txt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]LineChange{}
+	for _, c := range lc {
+		got[c.Kind] = c
+	}
+	if len(lc) != 1 || lc[0].Kind != "modified" || lc[0].Start != 2 || lc[0].Count != 3 {
+		// git reports the replaced line + 2 additions as one modified hunk
+		t.Errorf("line changes = %+v", lc)
+	}
+	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("from other\n"), 0o644)
+	lc, _ = r.LineChanges(ctx, "a.txt")
+	if len(lc) != 1 || lc[0].Kind != "deleted" {
+		t.Errorf("deletion = %+v", lc)
+	}
+}

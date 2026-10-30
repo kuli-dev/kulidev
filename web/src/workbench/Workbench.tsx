@@ -1,5 +1,5 @@
-import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
-import { api, type GitStatus } from "../api";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { api, type GitStatus, type TermInfo } from "../api";
 import { useLoad } from "../hooks";
 import { clearDefinitionCache } from "../defs";
 import { parse, type Route } from "../router";
@@ -14,6 +14,9 @@ import { DevicesPane } from "./Pair";
 import { QuickOpen } from "./QuickOpen";
 
 import { ChangesPane } from "./Changes";
+import { notificationsWanted, notify, stateOf, type AgentState } from "./attention";
+import { PulsePane } from "./Pulse";
+import { ReviewTab } from "./Review";
 import { AgentsPane, DocsPane, Explorer, IssuesPane, SearchPane } from "./SidePanes";
 
 // The editor (Monaco, ~1 MB) loads on first file open, not with the page.
@@ -23,7 +26,7 @@ const MapView = lazy(() => import("../views/Map").then((m) => ({ default: m.MapV
 const DiffTab = lazy(() => import("./DiffTab").then((m) => ({ default: m.DiffTab })));
 const TerminalPanel = lazy(() => import("./Terminal").then((m) => ({ default: m.TerminalPanel })));
 
-type View = "explorer" | "search" | "changes" | "docs" | "issues" | "agents" | "devices";
+type View = "explorer" | "search" | "changes" | "pulse" | "docs" | "issues" | "agents" | "devices";
 
 const WELCOME: Tab = { id: "welcome", kind: "welcome" };
 
@@ -74,6 +77,28 @@ export function Workbench() {
     addEventListener("focus", refreshGit);
     return () => { clearInterval(t); removeEventListener("focus", refreshGit); };
   }, [refreshGit, view]);
+
+  // Terminal/agent sessions, polled for Pulse and for "needs attention" notifications.
+  const [terms, setTerms] = useState<TermInfo[] | null>(null);
+  const lastStates = useRef<Map<string, AgentState>>(new Map());
+  useEffect(() => {
+    if (!ov.data?.terminals) return;
+    const poll = () => api.terminals().then((r) => {
+      setTerms(r.terminals);
+      const now = Date.now();
+      for (const t of r.terminals.filter((x) => x.kind === "agent")) {
+        const st = stateOf(t, now);
+        const before = lastStates.current.get(t.id);
+        lastStates.current.set(t.id, st);
+        if (!before || before === st || !document.hidden || !notificationsWanted()) continue;
+        if (st === "waiting") notify(`${t.title} is waiting`, t.tail?.at(-1) ?? "It may need your answer.", t.id);
+        if (st === "exited") notify(`${t.title} finished`, `Exit code ${t.exitCode}. Review its changes.`, t.id);
+      }
+    }, () => {});
+    poll();
+    const iv = setInterval(poll, view === "pulse" ? 3000 : 8000);
+    return () => clearInterval(iv);
+  }, [ov.data?.terminals, view]);
 
   async function startAgent(id: string) {
     const t = await api.startAgent(id, 110, Math.max(10, Math.floor(termH / 18)));
@@ -153,6 +178,7 @@ export function Workbench() {
       else if (r.page === "search") { setView("search"); setSearchQ(r.q); }
       else if (r.page === "issues") setView("issues");
       else if (r.page === "ask") setChat(true);
+      else if (r.page === "pulse") setView("pulse");
     };
     const on = () => {
       if (location.hash && location.hash !== "#/") go(parse(location.hash));
@@ -203,6 +229,7 @@ export function Workbench() {
     { v: "explorer", label: "Explorer (Ctrl+B)", icon: Icon.files },
     { v: "search", label: "Search (Ctrl+Shift+F)", icon: Icon.search },
     { v: "changes", label: "Changes (Ctrl+Shift+G)", icon: Icon.git },
+    ...(ov.data?.terminals ? [{ v: "pulse" as View, label: "Pulse: agents and changes", icon: Icon.pulse }] : []),
     { v: "docs", label: "Docs", icon: Icon.docs },
     { v: "issues", label: "Issues", icon: Icon.issues },
     ...(ov.data?.terminals ? [{ v: "agents" as View, label: "Agents", icon: Icon.agent }] : []),
@@ -241,6 +268,11 @@ export function Workbench() {
               onOpenDiff={(path, staged) => { openTab({ kind: "diff", path, staged }); if (narrow) setView(null); }} />
           )}
           {view === "agents" && <AgentsPane onStart={startAgent} />}
+          {view === "pulse" && (
+            <PulsePane terminals={terms} git={git?.status ?? null}
+              onOpenTerminal={(id) => { setTermFocus(id); setTermOpen(true); if (narrow) setView(null); }}
+              onReview={() => { openTab({ kind: "review" }); if (narrow) setView(null); }} />
+          )}
           {view === "devices" && <DevicesPane />}
         </aside>
       )}
@@ -278,6 +310,7 @@ export function Workbench() {
             </Suspense>
           )}
           {current?.kind === "doc" && <DocTab name={current.name} />}
+          {current?.kind === "review" && <ReviewTab git={git?.status ?? null} writable={git?.writable ?? false} onChanged={refreshGit} />}
           {current?.kind === "diff" && (
             <Suspense fallback={<p className="muted pad">Loading the diff…</p>}>
               <DiffTab key={`${current.id}@${gitVersion}`} path={current.path} staged={current.staged} narrow={narrow} />

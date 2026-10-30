@@ -157,7 +157,7 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 			}
 
 			hs := &http.Server{Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
-			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM) // also systemd/docker stop
 			defer stop()
 			go func() {
 				<-ctx.Done()

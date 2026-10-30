@@ -26,6 +26,27 @@ export function CodeTab({ path, from, to, onOpen, onCursor, onDirty }: {
   const host = useRef<HTMLDivElement>(null);
   const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const deco = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
+  const gutter = useRef<monaco.editor.IEditorDecorationsCollection | null>(null);
+
+  // Git change markers in the margin (vs HEAD), like VS Code's green/blue/red bars.
+  function refreshGutter() {
+    api.gitLines(path).then((r) => {
+      const ed = editor.current;
+      if (!ed) return;
+      gutter.current?.clear();
+      gutter.current = ed.createDecorationsCollection(r.changes.map((c) => {
+        const start = Math.max(1, c.start);
+        const end = c.kind === "deleted" ? start : start + Math.max(1, c.count) - 1;
+        return {
+          range: new monaco.Range(start, 1, end, 1),
+          options: {
+            isWholeLine: true, linesDecorationsClassName: `gutter-${c.kind}`,
+            overviewRuler: { color: c.kind === "added" ? "#6f8f5a" : c.kind === "deleted" ? "#8f4b2e" : "#4f7f8f", position: monaco.editor.OverviewRulerLane.Left },
+          },
+        };
+      }));
+    }, () => {});
+  }
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
@@ -62,6 +83,7 @@ export function CodeTab({ path, from, to, onOpen, onCursor, onDirty }: {
         ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveRef.current(false));
         onCursor({ line: 1, col: 1, lang: languageOf(path) });
         highlight(from, to);
+        refreshGutter();
       },
       (e: Error) => !disposed && setError(e.message),
     );
@@ -94,6 +116,7 @@ export function CodeTab({ path, from, to, onOpen, onCursor, onDirty }: {
       onDirty(path, isDirty(path));
       forgetFile(path);
       setSave({ kind: "saved" });
+      refreshGutter();
       // The server rescans shortly after a save; drop cached definitions after it.
       setTimeout(clearDefinitionCache, 3000);
     } catch (e) {

@@ -33,7 +33,10 @@ export type DocItem = {
 
 export type TreeFile = { p: string; l?: string; n: number };
 
-export type TermInfo = { id: string; title: string; started: string; exited: boolean; exitCode: number };
+export type TermInfo = {
+  id: string; title: string; kind: "shell" | "agent"; started: string; lastOutput: string;
+  exited: boolean; exitCode: number; tail?: string[];
+};
 
 export type AgentInfo = { id: string; name: string; installed: boolean; mcp: boolean; hint?: string };
 
@@ -98,7 +101,11 @@ export const api = {
   gitStatus: () => call<{ status: GitStatus; writable: boolean }>("api/git/status"),
   gitDiff: (path: string, staged: boolean) =>
     call<{ original: string; modified: string; binary: boolean }>(`api/git/diff?path=${q(path)}${staged ? "&staged=1" : ""}`),
-  git: (op: "stage" | "unstage" | "discard" | "commit", body: { paths?: string[]; message?: string; untracked?: boolean }) =>
+  gitBranches: () => call<{ branches: { name: string; current: boolean; upstream?: string }[] }>("api/git/branches"),
+  gitLines: (path: string) => call<{ changes: { kind: "added" | "modified" | "deleted"; start: number; count: number }[] }>(`api/git/lines?path=${q(path)}`),
+  gitPatch: () => call<{ patch: string; truncated: boolean }>("api/git/patch"),
+  git: (op: "stage" | "unstage" | "discard" | "commit" | "switch" | "fetch" | "pull" | "push",
+    body: { paths?: string[]; message?: string; untracked?: boolean; branch?: string; create?: boolean }) =>
     call<{ ok: boolean; commit?: string }>(`api/git/${op}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }),
   rescan: () => call<{ files: number; ms: number }>("api/rescan", { method: "POST" }),
 };

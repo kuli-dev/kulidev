@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type GitChange, type GitStatus } from "../api";
 
 const LABEL: Record<string, string> = { M: "modified", A: "added", D: "deleted", R: "renamed", C: "copied", U: "conflict", "?": "untracked", T: "type changed" };
@@ -24,7 +24,7 @@ export function ChangesPane({ status, writable, onChanged, onOpenDiff }: {
   const staged = status.changes.filter((c) => c.index !== "." && c.index !== "?");
   const unstaged = status.changes.filter((c) => c.worktree !== ".");
 
-  async function run(op: "stage" | "unstage" | "discard" | "commit", body: { paths?: string[]; message?: string; untracked?: boolean }) {
+  async function run(op: Parameters<typeof api.git>[0], body: Parameters<typeof api.git>[1]) {
     setBusy(true);
     setNote(null);
     try {
@@ -32,6 +32,10 @@ export function ChangesPane({ status, writable, onChanged, onOpenDiff }: {
       if (op === "commit") {
         setMsg("");
         setNote({ text: `Committed ${r.commit}.` });
+      } else if (op === "fetch" || op === "pull" || op === "push") {
+        setNote({ text: op === "fetch" ? "Fetched." : op === "pull" ? "Pulled (fast-forward)." : "Pushed." });
+      } else if (op === "switch") {
+        setNote({ text: `On ${body.branch} now.` });
       }
       onChanged();
     } catch (e) {
@@ -57,10 +61,7 @@ export function ChangesPane({ status, writable, onChanged, onOpenDiff }: {
   return (
     <div className="pane changes">
       <h2 className="pane-title">Changes</h2>
-      <p className="branch small pad-x">
-        On <strong>{status.branch}</strong>
-        {status.upstream && (status.ahead || status.behind) ? ` · ${status.ahead} to push, ${status.behind} to pull` : ""}
-      </p>
+      <BranchBar status={status} writable={writable} busy={busy} run={run} />
       {writable && (
         <form className="commit-box" onSubmit={commit}>
           <textarea value={msg} onChange={(e) => setMsg(e.target.value)} rows={3} placeholder="Commit message (Ctrl+Enter to commit)"
@@ -123,5 +124,51 @@ function Section({ title, items, staged, writable, busy, all, actions, onOpenDif
         })}
       </ul>
     </section>
+  );
+}
+
+function BranchBar({ status, writable, busy, run }: {
+  status: GitStatus; writable: boolean; busy: boolean;
+  run: (op: Parameters<typeof api.git>[0], body: Parameters<typeof api.git>[1]) => Promise<void>;
+}) {
+  const [branches, setBranches] = useState<string[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  useEffect(() => {
+    api.gitBranches().then((r) => setBranches(r.branches.map((b) => b.name)), () => {});
+  }, [status.branch]);
+
+  const sync = status.upstream
+    ? `${status.ahead ? `${status.ahead} to push` : ""}${status.ahead && status.behind ? ", " : ""}${status.behind ? `${status.behind} to pull` : ""}` || "up to date"
+    : "not pushed yet";
+  return (
+    <div className="branch-bar pad-x">
+      {writable && !creating ? (
+        <select value={status.branch} disabled={busy} aria-label="Branch"
+          onChange={(e) => {
+            if (e.target.value === "__new") setCreating(true);
+            else run("switch", { branch: e.target.value });
+          }}>
+          {branches.map((b) => <option key={b} value={b}>{b}</option>)}
+          <option value="__new">New branch…</option>
+        </select>
+      ) : writable ? (
+        <form className="new-branch" onSubmit={(e) => { e.preventDefault(); if (name.trim()) run("switch", { branch: name.trim(), create: true }).then(() => { setCreating(false); setName(""); }); }}>
+          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="feature/name" aria-label="New branch name" />
+          <button className="btn" disabled={busy || !name.trim()}>Create</button>
+          <button type="button" className="link-btn" onClick={() => setCreating(false)}>Cancel</button>
+        </form>
+      ) : (
+        <strong>{status.branch}</strong>
+      )}
+      <span className="small muted">{sync}</span>
+      {writable && (
+        <span className="sync-btns">
+          <button className="link-btn" disabled={busy} onClick={() => run("fetch", {})} title="Fetch from the remote">Fetch</button>
+          {status.behind > 0 && <button className="link-btn" disabled={busy} onClick={() => run("pull", {})} title="Fast-forward only: never makes a merge commit">Pull</button>}
+          {(status.ahead > 0 || !status.upstream) && <button className="link-btn" disabled={busy} onClick={() => run("push", {})} title="Push this branch (never forces)">Push</button>}
+        </span>
+      )}
+    </div>
   );
 }

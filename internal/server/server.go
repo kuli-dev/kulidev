@@ -128,6 +128,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/devices/{id}", s.deviceRevoke)
 	mux.HandleFunc("GET /api/git/status", s.gitStatus)
 	mux.HandleFunc("GET /api/git/diff", s.gitDiff)
+	mux.HandleFunc("GET /api/git/branches", s.gitBranches)
+	mux.HandleFunc("GET /api/git/lines", s.gitLines)
+	mux.HandleFunc("GET /api/git/patch", s.gitPatch)
 	mux.HandleFunc("POST /api/git/{op}", s.gitWrite)
 	mux.HandleFunc("GET /api/agents", s.agentList)
 	mux.HandleFunc("POST /api/agents", s.agentStart)
@@ -714,7 +717,35 @@ func (s *Server) gitDiff(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"original": orig, "modified": mod, "binary": binary})
 }
 
-// gitWrite handles stage, unstage, discard and commit.
+func (s *Server) gitBranches(w http.ResponseWriter, r *http.Request) {
+	bs, err := s.repo().Branches(r.Context())
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"branches": nonNil(bs)})
+}
+
+func (s *Server) gitLines(w http.ResponseWriter, r *http.Request) {
+	lc, err := s.repo().LineChanges(r.Context(), r.URL.Query().Get("path"))
+	if err != nil {
+		writeJSON(w, map[string]any{"changes": []any{}}) // untracked / not a repo: no markers
+		return
+	}
+	writeJSON(w, map[string]any{"changes": nonNil(lc)})
+}
+
+// gitPatch is the whole pending change as unified diffs, for reviewing on a phone.
+func (s *Server) gitPatch(w http.ResponseWriter, r *http.Request) {
+	patch, truncated, err := s.repo().Patch(r.Context(), 400<<10)
+	if err != nil {
+		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"patch": patch, "truncated": truncated})
+}
+
+// gitWrite handles stage, unstage, discard, commit, switch, fetch, pull and push.
 func (s *Server) gitWrite(w http.ResponseWriter, r *http.Request) {
 	if s.readOnly {
 		fail(w, http.StatusForbidden, "this workspace is read-only (kuli serve --read-only)")
@@ -724,6 +755,8 @@ func (s *Server) gitWrite(w http.ResponseWriter, r *http.Request) {
 		Paths     []string `json:"paths"`
 		Message   string   `json:"message"`
 		Untracked bool     `json:"untracked"` // discard: also delete untracked files
+		Branch    string   `json:"branch"`
+		Create    bool     `json:"create"`
 	}
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&req); err != nil {
 		fail(w, http.StatusBadRequest, "bad request body")
@@ -743,6 +776,14 @@ func (s *Server) gitWrite(w http.ResponseWriter, r *http.Request) {
 		var hash string
 		hash, err = repo.Commit(ctx, req.Message)
 		resp["commit"] = hash
+	case "switch":
+		err = repo.Switch(ctx, req.Branch, req.Create)
+	case "fetch":
+		err = repo.Fetch(ctx)
+	case "pull":
+		err = repo.Pull(ctx)
+	case "push":
+		err = repo.Push(ctx)
 	default:
 		fail(w, http.StatusNotFound, "unknown git operation")
 		return
@@ -986,7 +1027,7 @@ func (s *Server) agentStart(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	sess, err := s.terms.StartCommand(name, argv, req.Cols, req.Rows)
+	sess, err := s.terms.StartCommand(name, "agent", argv, req.Cols, req.Rows)
 	if errors.Is(err, term.ErrTooMany) {
 		fail(w, http.StatusTooManyRequests, err.Error())
 		return

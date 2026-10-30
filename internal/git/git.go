@@ -258,3 +258,180 @@ func (r Repo) Commit(ctx context.Context, message string) (string, error) {
 	b, err := r.run(ctx, nil, "rev-parse", "--short", "HEAD")
 	return strings.TrimSpace(string(b)), err
 }
+
+// Branch is a local branch.
+type Branch struct {
+	Name     string `json:"name"`
+	Current  bool   `json:"current"`
+	Upstream string `json:"upstream,omitempty"`
+}
+
+// Branches lists local branches.
+func (r Repo) Branches(ctx context.Context) ([]Branch, error) {
+	b, err := r.run(ctx, nil, "for-each-ref", "--format=%(HEAD)%00%(refname:short)%00%(upstream:short)", "refs/heads/")
+	if err != nil {
+		return nil, err
+	}
+	var out []Branch
+	for _, line := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+		f := strings.Split(line, "\x00")
+		if len(f) == 3 {
+			out = append(out, Branch{Name: f[1], Current: f[0] == "*", Upstream: f[2]})
+		}
+	}
+	return out, nil
+}
+
+// validBranch rejects names git would reject or read as options.
+func (r Repo) validBranch(ctx context.Context, name string) error {
+	if name == "" || strings.HasPrefix(name, "-") {
+		return fmt.Errorf("bad branch name %q", name)
+	}
+	if _, err := r.run(ctx, nil, "check-ref-format", "--branch", name); err != nil {
+		return fmt.Errorf("bad branch name %q", name)
+	}
+	return nil
+}
+
+// Switch checks out an existing branch, or creates it from HEAD when create is set.
+// Git refuses when uncommitted changes would be overwritten; that error is returned.
+func (r Repo) Switch(ctx context.Context, name string, create bool) error {
+	if err := r.validBranch(ctx, name); err != nil {
+		return err
+	}
+	args := []string{"switch"}
+	if create {
+		args = append(args, "-c")
+	}
+	_, err := r.run(ctx, nil, append(args, name)...)
+	return err
+}
+
+// Fetch updates remote-tracking refs.
+func (r Repo) Fetch(ctx context.Context) error {
+	_, err := r.run(ctx, nil, "fetch", "--prune")
+	return err
+}
+
+// Pull fast-forwards only: it never creates a merge commit behind the user's back.
+func (r Repo) Pull(ctx context.Context) error {
+	_, err := r.run(ctx, nil, "pull", "--ff-only")
+	return err
+}
+
+// Push pushes the current branch, setting its upstream on first push. Never forces.
+func (r Repo) Push(ctx context.Context) error {
+	st, err := r.Status(ctx)
+	if err != nil {
+		return err
+	}
+	if st.Upstream != "" {
+		_, err = r.run(ctx, nil, "push")
+		return err
+	}
+	remotes, err := r.run(ctx, nil, "remote")
+	if err != nil {
+		return err
+	}
+	rs := strings.Fields(string(remotes))
+	if len(rs) == 0 {
+		return errors.New("this repository has no remote to push to")
+	}
+	remote := rs[0]
+	for _, x := range rs {
+		if x == "origin" {
+			remote = x
+		}
+	}
+	_, err = r.run(ctx, nil, "push", "--set-upstream", remote, st.Branch)
+	return err
+}
+
+// LineChange marks a changed range in the working-tree version of a file.
+type LineChange struct {
+	Kind  string `json:"kind"`  // added, modified, deleted
+	Start int    `json:"start"` // 1-based line in the working tree
+	Count int    `json:"count"` // lines (0 for deletions: marker sits after Start)
+}
+
+// LineChanges compares the working tree with HEAD (or the index before the first
+// commit) for gutter markers.
+func (r Repo) LineChanges(ctx context.Context, p string) ([]LineChange, error) {
+	p, err := r.CleanPath(p)
+	if err != nil {
+		return nil, err
+	}
+	b, err := r.run(ctx, nil, "diff", "--no-color", "--no-ext-diff", "-U0", "HEAD", "--", p)
+	if err != nil {
+		b, err = r.run(ctx, nil, "diff", "--no-color", "--no-ext-diff", "-U0", "--", p)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var out []LineChange
+	for _, line := range strings.Split(string(b), "\n") {
+		if !strings.HasPrefix(line, "@@ ") {
+			continue
+		}
+		// @@ -a,b +c,d @@
+		f := strings.Fields(line)
+		if len(f) < 3 {
+			continue
+		}
+		_, oldN := hunkRange(f[1])
+		newStart, newN := hunkRange(f[2])
+		switch {
+		case oldN == 0:
+			out = append(out, LineChange{"added", newStart, newN})
+		case newN == 0:
+			out = append(out, LineChange{"deleted", newStart, 0})
+		default:
+			out = append(out, LineChange{"modified", newStart, newN})
+		}
+	}
+	return out, nil
+}
+
+func hunkRange(s string) (start, n int) {
+	s = strings.TrimLeft(s, "+-")
+	n = 1
+	if i := strings.IndexByte(s, ','); i >= 0 {
+		n, _ = strconv.Atoi(s[i+1:])
+		s = s[:i]
+	}
+	start, _ = strconv.Atoi(s)
+	return start, n
+}
+
+// Patch returns every pending change (staged and not, plus untracked files) as one
+// unified diff against HEAD, cut at max bytes.
+func (r Repo) Patch(ctx context.Context, max int) (string, bool, error) {
+	st, err := r.Status(ctx)
+	if err != nil {
+		return "", false, err
+	}
+	var b strings.Builder
+	if !st.Initial {
+		out, err := r.run(ctx, nil, "diff", "--no-color", "--no-ext-diff", "HEAD")
+		if err != nil {
+			return "", false, err
+		}
+		b.Write(out)
+	}
+	for _, c := range st.Changes {
+		if c.Worktree != "?" && !(st.Initial && c.Staged()) {
+			continue
+		}
+		// --no-index exits 1 when files differ; the output is what we want.
+		out, _ := r.run(ctx, nil, "diff", "--no-color", "--no-ext-diff", "--no-index", "--", "/dev/null", c.Path)
+		b.Write(out)
+		if b.Len() > max {
+			break
+		}
+	}
+	s := b.String()
+	if len(s) > max {
+		return s[:max], true, nil
+	}
+	return s, false, nil
+}

@@ -6,7 +6,8 @@ export type Route =
   | { page: "file"; path: string; from?: number; to?: number }
   | { page: "docs"; name?: string }
   | { page: "ask" }
-  | { page: "issues" };
+  | { page: "issues" }
+  | { page: "pulse" };
 
 export function parse(hash: string): Route {
   const h = decodeURIComponent(hash.replace(/^#/, "")) || "/";
@@ -22,6 +23,7 @@ export function parse(hash: string): Route {
     case "/search": return { page: "search", q: params.get("q") ?? "" };
     case "/ask": return { page: "ask" };
     case "/issues": return { page: "issues" };
+    case "/pulse": return { page: "pulse" };
   }
   if (base === "/docs" || base.startsWith("/docs/")) return { page: "docs", name: base.slice(6) || undefined };
   return { page: "overview" };

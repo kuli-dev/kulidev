@@ -44,15 +44,17 @@ the workspace, IDE and remote features are layered on top.
 ## v0.7 — Source control
 - [x] Changes view: status, badge, side-by-side diffs, stage/unstage/discard, commit via the user's git
 - [x] `.kulidev/.gitignore` covers devices, TLS keys and agent configs (was database only)
-- [ ] Branches: switch, create; pull/push with the user's credentials
-- [ ] Inline change markers in the editor gutter; blame on hover
+- [x] Branches: switch, create; fetch, pull (ff-only), push (never forced) with the user's credentials
+- [x] Change markers in the editor gutter
+- [ ] Blame on hover
 
 ## v0.6 — Remote & mobile
 - [x] Device pairing: one-time codes (10 min, single use, rate-limited) + terminal QR; per-device revocable sessions
 - [x] TLS required off-loopback (self-signed generator, own cert, or explicit --insecure-http for Tailscale/WireGuard)
 - [x] Devices view: list, revoke, sign out, invite another device with a QR code
 - [ ] Verify and tune the phone layout on real devices (responsive rules exist, untested on a phone)
-- [ ] Phone-first views: agent status, approvals, diffs
+- [x] Pulse: agent state (working / waiting / finished) with rendered output tail; Review with commit/discard all; notifications via a service worker
+- [ ] Answer an agent's question from Pulse without opening the full terminal
 
 ## Later
 - Desktop shell (Tauri), mobile PWA, remote workspaces + device pairing, Postgres for teams,
