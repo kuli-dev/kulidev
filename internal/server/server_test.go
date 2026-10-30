@@ -439,3 +439,24 @@ func TestPairingRequired(t *testing.T) {
 		t.Errorf("revoked session = %d", resp.StatusCode)
 	}
 }
+
+func TestTunnelHostNeedsPairing(t *testing.T) {
+	devices, _ := auth.Open(filepath.Join(t.TempDir(), "devices.json"))
+	ts, _ := setupWith(t, Options{Loopback: true, Auth: devices, TLS: true, AllowHosts: []string{"abc.ngrok-free.app"}})
+	req := func(host string) int {
+		r, _ := http.NewRequest("GET", ts.URL+"/api/overview", nil)
+		r.Host = host
+		resp, err := http.DefaultClient.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if code := req("abc.ngrok-free.app"); code != 401 {
+		t.Errorf("tunnel host, unpaired = %d, want 401 (allowed host, still needs pairing)", code)
+	}
+	if code := req("evil.ngrok-free.app"); code != 403 {
+		t.Errorf("other host = %d, want 403", code)
+	}
+}

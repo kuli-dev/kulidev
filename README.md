@@ -116,6 +116,16 @@ kuli serve --addr 0.0.0.0:7878 --tls-self-signed     # or --tls-cert/--tls-key
 kuli serve --addr 0.0.0.0:7878 --insecure-http       # only on an encrypted network (Tailscale, WireGuard)
 ```
 
+Or put a tunnel in front (no firewall or port-forwarding changes):
+
+```sh
+ngrok http 7878                                            # note the https URL it prints
+kuli serve --public-url https://<name>.ngrok-free.app      # kuli stays on localhost
+```
+
+`--public-url` treats the workspace as remote: pairing is required, only that host name is
+accepted, cookies are `Secure`, and the terminal stays off unless `--allow-remote-terminal`.
+
 On a network address every device must be **paired**: `kuli serve` prints a one-time code,
 the URLs that carry it (Tailscale first) and a QR code — scan it with your phone. Codes expire
 after 10 minutes and work once; wrong guesses are rate-limited. Each device gets its own

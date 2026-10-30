@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -31,6 +32,7 @@ func newServeCmd(o *options) *cobra.Command {
 		forceAuth            bool
 		tlsCert, tlsKey      string
 		selfSigned, insecure bool
+		publicURL            string
 		lf                   llmFlags
 	)
 	cmd := &cobra.Command{
@@ -54,6 +56,21 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 			}
 			loopback := host == "127.0.0.1" || host == "localhost" || host == "::1"
 			useTLS := tlsCert != "" || selfSigned
+			// Behind a public tunnel (ngrok, Cloudflare Tunnel) we listen on loopback, but
+			// the workspace is on the internet: treat it as remote in every way that matters.
+			var pub *url.URL
+			if publicURL != "" {
+				if pub, err = url.Parse(publicURL); err != nil || pub.Host == "" || (pub.Scheme != "https" && pub.Scheme != "http") {
+					return fmt.Errorf("--public-url must look like https://name.ngrok-free.app")
+				}
+				if pub.Scheme != "https" {
+					return errors.New("--public-url must be https: the tunnel provides the TLS")
+				}
+				if !loopback {
+					return errors.New("--public-url expects kuli to listen on loopback (the default --addr) with the tunnel in front")
+				}
+			}
+			remote := !loopback || pub != nil
 			if (tlsCert == "") != (tlsKey == "") {
 				return errors.New("--tls-cert and --tls-key go together")
 			}
@@ -85,7 +102,7 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 
 			// Off the loopback interface every device must pair; locally it's optional.
 			var devices *auth.Store
-			if !loopback || forceAuth {
+			if remote || forceAuth {
 				if devices, err = auth.Open(filepath.Join(dir, "devices.json")); err != nil {
 					return err
 				}
@@ -101,10 +118,13 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 			}
 			// A terminal is a shell for whoever is allowed in: on a network address it
 			// needs an explicit opt-in even though devices are paired.
-			terminals := !noTerminal && !readOnly && (loopback || remoteShell)
-			srv, err := server.New(root, dir, st, model, web.FS(), server.Options{
-				ReadOnly: readOnly, Loopback: loopback, Terminals: terminals, Auth: devices, TLS: useTLS,
-			})
+			terminals := !noTerminal && !readOnly && (!remote || remoteShell)
+			opts := server.Options{ReadOnly: readOnly, Loopback: loopback, Terminals: terminals, Auth: devices, TLS: useTLS}
+			if pub != nil {
+				opts.AllowHosts = []string{pub.Hostname()}
+				opts.TLS = true // the tunnel terminates TLS: cookies must be Secure
+			}
+			srv, err := server.New(root, dir, st, model, web.FS(), opts)
 			if err != nil {
 				return err
 			}
@@ -126,10 +146,13 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 			}
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "KuliDev is serving %s on %s://%s\n", filepath.Base(root), scheme, ln.Addr())
-			if !loopback && !terminals && !noTerminal && !readOnly {
-				fmt.Fprintln(os.Stderr, "kuli: terminals are off on a network address; add --allow-remote-terminal to give paired devices a shell")
+			if remote && !terminals && !noTerminal && !readOnly {
+				fmt.Fprintln(os.Stderr, "kuli: terminals are off for remote access; add --allow-remote-terminal to give paired devices a shell")
 			}
-			if devices != nil {
+			if pub != nil {
+				fmt.Fprintf(out, "Public URL: %s (pairing required)\n", strings.TrimSuffix(pub.String(), "/"))
+				printPairingURLs(out, devices, []string{strings.TrimSuffix(pub.String(), "/")})
+			} else if devices != nil {
 				printPairing(out, devices, scheme, addrs, port, loopback)
 			}
 
@@ -163,6 +186,7 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 	f.StringVar(&tlsKey, "tls-key", "", "TLS private key file")
 	f.BoolVar(&selfSigned, "tls-self-signed", false, "serve HTTPS with a generated certificate (browsers warn once)")
 	f.BoolVar(&insecure, "insecure-http", false, "allow plain HTTP on a network address (only on an already-encrypted network)")
+	f.StringVar(&publicURL, "public-url", "", "public https URL of a tunnel in front of kuli (ngrok, Cloudflare Tunnel); forces pairing")
 	lf.add(cmd, 2048)
 	return cmd
 }
@@ -174,17 +198,25 @@ func portPlus(p string) int {
 
 // printPairing shows a one-time code, the URLs that carry it, and a QR code for phones.
 func printPairing(out io.Writer, devices *auth.Store, scheme string, addrs []string, port string, loopback bool) {
-	code := devices.NewCode()
 	if loopback || len(addrs) == 0 {
 		addrs = []string{"127.0.0.1"}
 	}
-	var urls []string
+	var bases []string
 	for _, a := range addrs {
 		h := a
 		if strings.Contains(a, ":") {
 			h = "[" + a + "]"
 		}
-		urls = append(urls, fmt.Sprintf("%s://%s:%s/#/pair?code=%s", scheme, h, port, code))
+		bases = append(bases, fmt.Sprintf("%s://%s:%s", scheme, h, port))
+	}
+	printPairingURLs(out, devices, bases)
+}
+
+func printPairingURLs(out io.Writer, devices *auth.Store, bases []string) {
+	code := devices.NewCode()
+	var urls []string
+	for _, b := range bases {
+		urls = append(urls, b+"/#/pair?code="+code)
 	}
 	fmt.Fprintf(out, "\nPair a device — code %s (valid %d minutes, works once):\n", code, int(auth.CodeTTL.Minutes()))
 	for _, u := range urls {

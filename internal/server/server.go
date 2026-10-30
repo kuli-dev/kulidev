@@ -51,10 +51,11 @@ type Server struct {
 	scanM sync.Mutex
 
 	readOnly  bool
-	loopback  bool          // bound to localhost: only localhost Host headers are accepted
-	terms     *term.Manager // nil when terminals are disabled
-	auth      *auth.Store   // nil when no pairing is required (local use)
-	secure    bool          // served over TLS: cookies get the Secure flag
+	loopback  bool            // bound to localhost: only localhost Host headers are accepted
+	allowHost map[string]bool // extra Host names accepted, e.g. a tunnel's public name
+	terms     *term.Manager   // nil when terminals are disabled
+	auth      *auth.Store     // nil when no pairing is required (local use)
+	secure    bool            // served over TLS: cookies get the Secure flag
 	rescanMu  sync.Mutex
 	rescanDue *time.Timer
 }
@@ -66,13 +67,19 @@ type Options struct {
 	Terminals bool // allow shell sessions
 	// Auth, when set, requires every API call to come from a paired device.
 	Auth *auth.Store
-	TLS  bool
+	TLS  bool // cookies get the Secure flag (TLS here or at a proxy in front)
+	// AllowHosts are public names a tunnel (ngrok, Cloudflare Tunnel) forwards as Host.
+	AllowHosts []string
 }
 
 // New loads the snapshot and component graph.
 func New(root, dataDir string, st *store.Store, llm docs.Chatter, ui fs.FS, opts Options) (*Server, error) {
 	s := &Server{root: root, dataDir: dataDir, store: st, llm: llm, ui: ui, readOnly: opts.ReadOnly, loopback: opts.Loopback}
 	s.auth, s.secure = opts.Auth, opts.TLS
+	s.allowHost = map[string]bool{}
+	for _, h := range opts.AllowHosts {
+		s.allowHost[strings.ToLower(h)] = true
+	}
 	if opts.Terminals && !opts.ReadOnly {
 		s.terms = term.NewManager(root)
 	}
@@ -153,7 +160,7 @@ func (s *Server) guard(next http.Handler) http.Handler {
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:")
-		if s.loopback && !loopbackHost(r.Host) {
+		if s.loopback && !loopbackHost(r.Host) && !s.allowHost[strings.ToLower(hostOnly(r.Host))] {
 			fail(w, http.StatusForbidden, "unexpected Host header")
 			return
 		}
@@ -195,6 +202,13 @@ func authRequired(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusUnauthorized)
 	json.NewEncoder(w).Encode(map[string]any{"error": "pair this device first", "auth": true})
+}
+
+func hostOnly(hostport string) string {
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		return h
+	}
+	return hostport
 }
 
 func loopbackHost(hostport string) bool {
