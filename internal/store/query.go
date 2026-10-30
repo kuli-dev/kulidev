@@ -292,3 +292,11 @@ func (s *Store) ScannedCommit() string {
 	s.DB.QueryRow(`SELECT commit_hash FROM runs ORDER BY id DESC LIMIT 1`).Scan(&c)
 	return c.String
 }
+
+// File returns one scanned file's metadata, or sql.ErrNoRows.
+func (s *Store) File(p string) (FileInfo, error) {
+	var f FileInfo
+	err := s.DB.QueryRow(`SELECT path, COALESCE(lang,''), COALESCE(sha256,''), COALESCE(lines,0), parsed, COALESCE(doc,'')
+		FROM files WHERE path = ?`, path.Clean(p)).Scan(&f.Path, &f.Lang, &f.SHA256, &f.Lines, &f.Parsed, &f.Doc)
+	return f, err
+}

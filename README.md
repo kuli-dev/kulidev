@@ -14,7 +14,7 @@ Every fact KuliDev records points back to the file and line that proves it. No v
 
 Early. **v0.1 is the knowledge engine**: scan, search and dependency queries from the CLI,
 an MCP server so coding agents can use the same knowledge, DocsMana handover docs and
-`kuli ask` for cited answers. The web UI comes next — see [docs/ROADMAP.md](docs/ROADMAP.md).
+`kuli ask` for cited answers, and a web UI (`kuli serve`). What's next is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
 ## Quick start
 
@@ -75,6 +75,23 @@ definition covers, and shows the model the relevant code (long functions are cut
 the lines that matter). Citations are validated exactly like DocsMana's. Without a model,
 `kuli ask` prints the evidence it found.
 
+## Web UI — `kuli serve`
+
+```sh
+kuli serve            # http://127.0.0.1:7878
+```
+
+- **Overview**: language mix, the files everything depends on, third-party modules, infra files.
+- **Map**: interactive component graph; click a component to see what it depends on, who
+  uses it, and its files with their doc comments.
+- **Search** and a **file viewer** where cited lines are highlighted — every citation in
+  docs and answers opens here.
+- **Docs** (DocsMana output with stale warnings), **Ask**, and **Issues** (broken imports).
+
+It binds to localhost by default because it shows your source code; the API refuses
+cross-origin writes, and only files recorded by the scan can be read. The UI (React +
+TypeScript, `web/`) is embedded in the binary — no Node needed to run it.
+
 ## Use it from your coding agent (MCP)
 
 ```sh
@@ -112,7 +129,7 @@ Every answer warns the agent when `HEAD` has moved since the last scan.
 
 ## Stack
 
-Go (single binary, Tree-sitter, SQLite/FTS5) + React/TypeScript web UI (embedded, coming).
+Go (single binary, Tree-sitter, SQLite/FTS5) + React/TypeScript web UI embedded in the binary.
 
 ## License
 

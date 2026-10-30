@@ -20,6 +20,9 @@ type Component struct {
 	inDegree  map[string]int // file → distinct importing files (any component)
 }
 
+// ImportersOf returns how many files import f (for a Go file: its package).
+func (c *Component) ImportersOf(f store.FileInfo) int { return c.importersOf(f) }
+
 // Importers of a file; a Go file counts the importers of its package.
 func (c *Component) importersOf(f store.FileInfo) int {
 	if n := c.inDegree[f.Path]; n > 0 {

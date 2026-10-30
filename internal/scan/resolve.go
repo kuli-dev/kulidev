@@ -165,7 +165,13 @@ func (r *resolver) resolvePython(from, spec string, maybeSymbol bool) Target {
 		}
 	}
 	for _, c := range candidates {
-		if t, ok := r.pyModule(c); ok {
+		t, ok := r.pyModule(c)
+		// A bare folder (no __init__.py) named like a top-level import is usually a
+		// coincidence — e.g. an "alembic/" migrations folder vs. the alembic library.
+		if ok && t.Kind == TargetPackage && !strings.HasPrefix(spec, ".") && !strings.Contains(spec, ".") {
+			continue
+		}
+		if ok {
 			return t
 		}
 	}

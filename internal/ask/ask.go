@@ -23,6 +23,9 @@ type Options struct {
 	Root string       // repository root, for reading code
 	LLM  docs.Chatter // nil → retrieval only
 	Log  io.Writer
+	// LinkBase renders citations as links (e.g. "#/file" for the web UI);
+	// empty renders plain "path:line".
+	LinkBase string
 }
 
 // Answer is the grounded reply.
@@ -118,7 +121,7 @@ func Ask(ctx context.Context, st *store.Store, question string, opts Options) (*
 	if err != nil {
 		return nil, err
 	}
-	ans.Text, ans.Stats = f.Resolve(reply, "")
+	ans.Text, ans.Stats = f.Resolve(reply, opts.LinkBase)
 	return ans, nil
 }
 

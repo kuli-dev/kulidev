@@ -29,7 +29,7 @@ the workspace, IDE and remote features are layered on top.
 - [ ] Agent runtime: CLI adapters (Claude Code, Codex, OpenCode, Aider) on supervised PTYs
 
 ## v0.4 — Web UI (`kuli serve`)
-- [ ] Embedded React app: architecture graph (React Flow), docs browser, search
+- [x] `kuli serve`: embedded React app — overview, component map (React Flow + dagre), search, file viewer with cited-line highlighting, docs with freshness, ask, broken imports
 - [ ] Persistent terminals + agent sessions that survive client disconnects
 
 ## Later

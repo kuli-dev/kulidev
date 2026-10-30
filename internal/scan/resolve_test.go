@@ -7,7 +7,7 @@ func TestResolve(t *testing.T) {
 		"go.mod", "cmd/app/main.go", "internal/store/store.go",
 		"web/src/lib/api.ts", "web/src/components/index.tsx", "web/src/app.tsx",
 		"svc/app/__init__.py", "svc/app/db.py", "svc/app/models/user.py",
-		"svc/ns/agent/nodes.py", "svc/ns/agent/prompts.py",
+		"svc/ns/agent/nodes.py", "svc/ns/agent/prompts.py", "alembic/env.py",
 		"web/src/lib/workspace/package.json", "web/src/lib/workspace/src/index.ts",
 	}
 	read := func(p string) []byte {
@@ -40,6 +40,9 @@ func TestResolve(t *testing.T) {
 		// namespace package (no __init__.py): "from . import prompts"
 		{"Python", "svc/ns/agent/nodes.py", ".prompts", Target{TargetFile, "svc/ns/agent/prompts.py"}, true},
 		{"Python", "svc/ns/agent/nodes.py", ".", Target{TargetPackage, "svc/ns/agent"}, false},
+		// a root "alembic/" folder must not capture the alembic library
+		{"Python", "svc/app/db.py", "alembic", Target{TargetExternal, "py:alembic"}, false},
+		{"Python", "svc/app/db.py", "alembic.env", Target{TargetFile, "alembic/env.py"}, false},
 		// "from . import helper" where helper lives in __init__.py
 		{"Python", "svc/app/db.py", ".helper", Target{TargetFile, "svc/app/__init__.py"}, true},
 		// genuinely missing module must stay broken, even inside a package

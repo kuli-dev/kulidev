@@ -61,6 +61,7 @@ Docs-nya mana? Ini.`,
 		newMCPCmd(o),
 		newDocsCmd(o),
 		newAskCmd(o),
+		newServeCmd(o),
 		&cobra.Command{
 			Use:   "version",
 			Short: "Print the version",
