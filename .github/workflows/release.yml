@@ -39,13 +39,20 @@ jobs:
           [ -n "$CXX" ] || unset CXX
           ext=""; [ "$GOOS" = windows ] && ext=".exe"
           mkdir -p out/pkg
-          go build -trimpath -ldflags "-s -w -X github.com/kuli-dev/kulidev/internal/cli.Version=${GITHUB_REF_NAME}" \
-            -o "out/pkg/kuli${ext}" ./cmd/kuli
+          ver="-X github.com/kuli-dev/kulidev/internal/cli.Version=${GITHUB_REF_NAME}"
+          if [ "$GOOS" = windows ]; then
+            # Stamp this release's version into the Windows resources (icon, version info).
+            v="${GITHUB_REF_NAME#v}"; v="${v%%-*}"
+            for d in cmd/kuli cmd/kulidev-desktop; do
+              (cd "$d" && GOOS= GOARCH= CGO_ENABLED=0 go run github.com/tc-hib/go-winres@v0.3.3 make --arch "$GOARCH" --product-version "$v" --file-version "$v")
+            done
+          fi
+          go build -trimpath -ldflags "-s -w $ver" -o "out/pkg/kuli${ext}" ./cmd/kuli
           # The desktop app (native window) for Windows and macOS.
           if [ "$GOOS" = windows ]; then
-            go build -trimpath -ldflags "-s -w -H=windowsgui" -o out/pkg/KuliDev.exe ./cmd/kulidev-desktop
+            go build -trimpath -ldflags "-s -w -H=windowsgui $ver" -o out/pkg/KuliDev.exe ./cmd/kulidev-desktop
           elif [ "$GOOS" = darwin ]; then
-            go build -trimpath -ldflags "-s -w" -o out/pkg/KuliDev ./cmd/kulidev-desktop
+            go build -trimpath -ldflags "-s -w $ver" -o out/pkg/KuliDev ./cmd/kulidev-desktop
           fi
           cp LICENSE README.md CHANGELOG.md out/pkg/
           name="kuli_${GITHUB_REF_NAME#v}_${GOOS}_${GOARCH}"

@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-10-30)
+
+The desktop app, multi-repository folders, Settings, and a new look.
 
 - **Desktop app** for Windows and macOS: `KuliDev.exe` opens the workbench in a native
   window (WebView2 / WebKit) — no browser, no commands.
