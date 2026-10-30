@@ -126,7 +126,7 @@ func (r *repo) overviewFacts() *Facts {
 		}
 		hub := c.Hub()
 		f.Line("- %s: %d source files, %d lines, mainly %s; most imported file %s (%d importers) %s",
-			c.Name, len(c.Files), c.Lines, c.MainLang(), hub.Path, r.inDegree[hub.Path], r.whole(f, hub.Path))
+			c.Name, len(c.Files), c.Lines, c.MainLang(), hub.Path, c.importersOf(hub), r.whole(f, hub.Path))
 	}
 
 	f.Line("\nMost depended-on internal files:")
@@ -243,8 +243,8 @@ func (r *repo) componentFacts(f *Facts, c *Component) {
 		}
 		f.Line("  defines %s %s in %s %s", y.Kind, y.Name, y.Path, f.Cite(y.Path, y.Line, y.EndLine))
 	}
-	if hub := c.Hub(); r.inDegree[hub.Path] > 0 {
-		f.Line("  most imported file: %s (%d importers) %s", hub.Path, r.inDegree[hub.Path], r.whole(f, hub.Path))
+	if hub := c.Hub(); c.importersOf(hub) > 0 {
+		f.Line("  most imported file: %s (%d importers) %s", hub.Path, c.importersOf(hub), r.whole(f, hub.Path))
 	}
 	if len(c.DependsOn) > 0 {
 		var d []string

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"path"
 	"strings"
+
+	"github.com/kuli-dev/kulidev/internal/scan"
 )
 
 // Run describes the latest scan.
@@ -59,9 +61,16 @@ func (s *Store) Stats() (*Stats, error) {
 	if st.TopInternal, err = s.counts(fmt.Sprintf(importers, "qualname", "d.kind IN ('FILE','PACKAGE')")); err != nil {
 		return nil, err
 	}
-	if st.TopExternal, err = s.counts(fmt.Sprintf(importers, "name", // third-party only: skip unresolved relatives and Go stdlib (no dot in the path)
-		"d.kind = 'EXTERNAL' AND d.name NOT LIKE 'unresolved:%' AND NOT (d.name LIKE 'go:%' AND d.name NOT LIKE 'go:%.%')")); err != nil {
+	// Third-party only: unresolved relatives and standard libraries are filtered out.
+	ext, err := s.counts(fmt.Sprintf(strings.Replace(importers, "LIMIT 8", "LIMIT 200", 1), "name",
+		"d.kind = 'EXTERNAL' AND d.name NOT LIKE 'unresolved:%'"))
+	if err != nil {
 		return nil, err
+	}
+	for _, c := range ext {
+		if !scan.IsStdlib(c.Label) && len(st.TopExternal) < 8 {
+			st.TopExternal = append(st.TopExternal, c)
+		}
 	}
 	if st.Manifests, err = s.counts(`SELECT kind, COUNT(*), 0 FROM manifests GROUP BY kind ORDER BY COUNT(*) DESC, kind`); err != nil {
 		return nil, err

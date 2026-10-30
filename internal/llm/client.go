@@ -23,6 +23,9 @@ type Config struct {
 	Temperature float64
 	MaxTokens   int
 	Timeout     time.Duration
+	// ReasoningEffort is sent as reasoning_effort when set (e.g. "none", "low").
+	// Reasoning models can otherwise spend the whole token budget thinking.
+	ReasoningEffort string
 }
 
 // FromEnv fills unset fields from KULI_LLM_* and then OPENAI_* variables.
@@ -41,6 +44,7 @@ func (c Config) FromEnv() Config {
 	c.BaseURL = pick(c.BaseURL, "KULI_LLM_BASE_URL", "OPENAI_BASE_URL")
 	c.APIKey = pick(c.APIKey, "KULI_LLM_API_KEY", "OPENAI_API_KEY")
 	c.Model = pick(c.Model, "KULI_LLM_MODEL", "OPENAI_MODEL")
+	c.ReasoningEffort = pick(c.ReasoningEffort, "KULI_LLM_REASONING_EFFORT")
 	if c.MaxTokens == 0 {
 		c.MaxTokens = 2048
 	}
@@ -94,6 +98,7 @@ type chatRequest struct {
 	Messages    []Message `json:"messages"`
 	Temperature float64   `json:"temperature"`
 	MaxTokens   int       `json:"max_tokens,omitempty"`
+	Reasoning   string    `json:"reasoning_effort,omitempty"`
 }
 
 type chatResponse struct {
@@ -109,13 +114,20 @@ type chatResponse struct {
 	} `json:"usage"`
 }
 
+// ErrThinkingBudget means the model used its whole token budget before writing an answer.
+var ErrThinkingBudget = errors.New("model ran out of tokens while reasoning: raise --max-tokens or set --reasoning-effort none")
+
+// ErrEmptyReply means the model answered with no content.
+var ErrEmptyReply = errors.New("model returned an empty reply")
+
 // Usage counts tokens across calls.
 type Usage struct{ Prompt, Completion int }
 
 // Chat sends messages and returns the assistant's reply. It retries rate limits and
 // server errors with backoff.
 func (c *Client) Chat(ctx context.Context, msgs []Message) (string, Usage, error) {
-	body, _ := json.Marshal(chatRequest{Model: c.cfg.Model, Messages: msgs, Temperature: c.cfg.Temperature, MaxTokens: c.cfg.MaxTokens})
+	body, _ := json.Marshal(chatRequest{Model: c.cfg.Model, Messages: msgs, Temperature: c.cfg.Temperature,
+		MaxTokens: c.cfg.MaxTokens, Reasoning: c.cfg.ReasoningEffort})
 	var lastErr error
 	for attempt := 0; attempt < 4; attempt++ {
 		if attempt > 0 {
@@ -157,7 +169,15 @@ func (c *Client) Chat(ctx context.Context, msgs []Message) (string, Usage, error
 		if len(cr.Choices) == 0 {
 			return "", Usage{}, errors.New("LLM response has no choices")
 		}
-		return stripThinking(cr.Choices[0].Message.Content), Usage{cr.Usage.PromptTokens, cr.Usage.CompletionTokens}, nil
+		u := Usage{cr.Usage.PromptTokens, cr.Usage.CompletionTokens}
+		out := stripThinking(cr.Choices[0].Message.Content)
+		if out == "" {
+			if cr.Choices[0].FinishReason == "length" {
+				return "", u, ErrThinkingBudget
+			}
+			return "", u, ErrEmptyReply
+		}
+		return out, u, nil
 	}
 	return "", Usage{}, lastErr
 }

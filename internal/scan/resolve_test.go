@@ -52,3 +52,16 @@ func TestResolve(t *testing.T) {
 		}
 	}
 }
+
+func TestIsStdlib(t *testing.T) {
+	for name, want := range map[string]bool{
+		"go:fmt": true, "go:net/http": true, "go:github.com/spf13/cobra": false,
+		"py:os": true, "py:json": true, "py:typing": true, "py:sqlalchemy": false,
+		"npm:fs": true, "npm:node:path": true, "npm:fs/promises": true, "npm:react": false,
+		"npm:@tanstack/react-query": false,
+	} {
+		if got := IsStdlib(name); got != want {
+			t.Errorf("IsStdlib(%q) = %v, want %v", name, got, want)
+		}
+	}
+}

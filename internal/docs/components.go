@@ -20,11 +20,22 @@ type Component struct {
 	inDegree  map[string]int // file → distinct importing files (any component)
 }
 
+// Importers of a file; a Go file counts the importers of its package.
+func (c *Component) importersOf(f store.FileInfo) int {
+	if n := c.inDegree[f.Path]; n > 0 {
+		return n
+	}
+	if strings.HasSuffix(f.Path, ".go") {
+		return c.inDegree[path.Dir(f.Path)]
+	}
+	return 0
+}
+
 // Hub returns the component's most imported file, falling back to its largest.
 func (c *Component) Hub() store.FileInfo {
 	best, bestN := c.Files[0], -1
 	for _, f := range c.Files {
-		n := c.inDegree[f.Path]
+		n := c.importersOf(f)
 		if n > bestN || (n == bestN && f.Lines > best.Lines) {
 			best, bestN = f, n
 		}
@@ -156,6 +167,8 @@ func BuildComponents(snap *store.Snapshot) ([]*Component, map[string]string) {
 	for target, files := range importedBy {
 		if k, ok := fileComp[target]; ok {
 			byName[k].inDegree[target] = len(files)
+		} else if k, ok := dirComp[target]; ok {
+			byName[k].inDegree[target] = len(files) // Go package dir
 		}
 	}
 

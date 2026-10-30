@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -39,7 +40,8 @@ type DocResult struct {
 	ID       string            `json:"id"`
 	File     string            `json:"file"`
 	Title    string            `json:"title"`
-	Mode     string            `json:"mode"` // "llm" or "facts-only"
+	Mode     string            `json:"mode"` // "llm", "llm+fallback" or "facts-only"
+	Fallback int               `json:"fallback_sections,omitempty"`
 	Valid    int               `json:"citations"`
 	Removed  int               `json:"citations_removed"`
 	Coverage float64           `json:"citation_coverage"`
@@ -223,7 +225,14 @@ func (g *generator) doc(ctx context.Context, id string) (*DocResult, error) {
 		}
 		raw, err := g.write(ctx, title, p)
 		if err != nil {
-			return nil, err
+			if ctx.Err() != nil || !recoverable(err) {
+				return nil, err
+			}
+			// Keep going: this section falls back to its raw facts, and the doc says so.
+			fmt.Fprintf(g.opts.Log, "kuli: %s: %v — using facts for this section\n", id, err)
+			raw = factsMarkdown(p.facts.Body())
+			res.Fallback++
+			res.Mode = "llm+fallback"
 		}
 		out, st := p.facts.Resolve(raw, linkBase)
 		res.Valid += st.Valid
@@ -235,7 +244,10 @@ func (g *generator) doc(ctx context.Context, id string) (*DocResult, error) {
 		}
 		body.WriteString(strings.TrimSpace(out) + "\n\n")
 	}
-	res.Coverage = 1
+	res.Coverage = 1 // nothing to ground (deterministic doc)
+	if res.Mode != "facts-only" && paras == 0 && hasFacts(parts) {
+		res.Coverage = 0
+	}
 	if paras > 0 {
 		res.Coverage = float64(grounded) / float64(paras)
 	}
@@ -292,7 +304,24 @@ func factsMarkdown(body string) string {
 	return b.String()
 }
 
+func hasFacts(parts []section) bool {
+	for _, p := range parts {
+		if p.facts != nil {
+			return true
+		}
+	}
+	return false
+}
+
+func recoverable(err error) bool {
+	return errors.Is(err, llm.ErrThinkingBudget) || errors.Is(err, llm.ErrEmptyReply)
+}
+
 func modeNote(res *DocResult) string {
+	if res.Mode == "llm+fallback" {
+		return fmt.Sprintf("> **Partly facts-only** — the model returned no usable text for %d section(s), "+
+			"which list the raw evidence instead.\n\n", res.Fallback)
+	}
 	if res.Mode == "facts-only" {
 		return "> **Facts-only mode** — no LLM was configured, so this page lists the raw evidence. " +
 			"Set `KULI_LLM_BASE_URL` and `KULI_LLM_MODEL` to get written documentation.\n\n"

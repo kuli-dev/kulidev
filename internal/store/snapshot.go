@@ -1,6 +1,10 @@
 package store
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/kuli-dev/kulidev/internal/scan"
+)
 
 // FileInfo is one scanned file.
 type FileInfo struct {
@@ -90,7 +94,7 @@ func (s *Store) LoadSnapshot() (*Snapshot, error) {
 			snap.Imports = append(snap.Imports, ImportPair{from, strings.TrimPrefix(q, "pkg:"), line})
 		case "EXTERNAL":
 			name := strings.TrimPrefix(q, "ext:")
-			if strings.HasPrefix(name, "unresolved:") {
+			if strings.HasPrefix(name, "unresolved:") || scan.IsStdlib(name) {
 				continue
 			}
 			if k := [2]string{from, name}; !extSeen[k] {

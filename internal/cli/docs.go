@@ -31,6 +31,7 @@ OpenRouter, OpenAI, ...):
   export KULI_LLM_BASE_URL=http://localhost:11434/v1   # Ollama
   export KULI_LLM_MODEL=qwen3:8b
   export KULI_LLM_API_KEY=...                          # if the endpoint needs one
+  export KULI_LLM_REASONING_EFFORT=none                # reasoning models: skip long thinking
 
 Without an LLM it writes facts-only documents. Secrets in config files are redacted
 before anything is sent to the model.`,
@@ -90,7 +91,8 @@ before anything is sent to the model.`,
 	cmd.Flags().StringVar(&cfg.BaseURL, "llm-url", "", "OpenAI-compatible base URL (default $KULI_LLM_BASE_URL)")
 	cmd.Flags().StringVar(&cfg.Model, "llm-model", "", "model name (default $KULI_LLM_MODEL)")
 	cmd.Flags().Float64Var(&cfg.Temperature, "temperature", 0.2, "sampling temperature")
-	cmd.Flags().IntVar(&maxTokens, "max-tokens", 2048, "max tokens per model reply")
+	cmd.Flags().IntVar(&maxTokens, "max-tokens", 4096, "max tokens per model reply (reasoning models count thinking here)")
+	cmd.Flags().StringVar(&cfg.ReasoningEffort, "reasoning-effort", "", "send reasoning_effort (e.g. none, low) for reasoning models (default $KULI_LLM_REASONING_EFFORT)")
 	cmd.AddCommand(newDocsStatusCmd(o))
 	return cmd
 }
