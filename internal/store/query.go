@@ -300,3 +300,28 @@ func (s *Store) File(p string) (FileInfo, error) {
 		FROM files WHERE path = ?`, path.Clean(p)).Scan(&f.Path, &f.Lang, &f.SHA256, &f.Lines, &f.Parsed, &f.Doc)
 	return f, err
 }
+
+// Definitions returns definitions with exactly this name (for go-to-definition),
+// preferring classes and functions over variables and test files last.
+func (s *Store) Definitions(name string, limit int) ([]Hit, error) {
+	rows, err := s.DB.Query(`SELECT kind, qualname, path, line_start, line_end, COALESCE(doc,'') FROM nodes
+		WHERE name = ? AND kind NOT IN ('FILE','PACKAGE','EXTERNAL')
+		ORDER BY (path LIKE '%test%'), CASE kind WHEN 'class' THEN 0 WHEN 'struct' THEN 0 WHEN 'interface' THEN 1
+			WHEN 'function' THEN 2 WHEN 'method' THEN 3 ELSE 4 END, path LIMIT ?`, name, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Hit
+	for rows.Next() {
+		var h Hit
+		if err := rows.Scan(&h.Kind, &h.Name, &h.Path, &h.Line, &h.EndLine, &h.Detail); err != nil {
+			return nil, err
+		}
+		if i := strings.IndexByte(h.Name, '#'); i >= 0 {
+			h.Name = h.Name[i+1:]
+		}
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}

@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-
 // Hash routes: #/  #/map  #/search?q=  #/file/<path>#L10-L20  #/docs/<name>  #/ask  #/issues
 export type Route =
   | { page: "overview" }
@@ -36,13 +34,3 @@ export const href = {
   search: (q: string) => `#/search?q=${encodeURIComponent(q)}`,
   doc: (name: string) => `#/docs/${name}`,
 };
-
-export function useRoute(): Route {
-  const [route, setRoute] = useState(() => parse(location.hash));
-  useEffect(() => {
-    const on = () => setRoute(parse(location.hash));
-    addEventListener("hashchange", on);
-    return () => removeEventListener("hashchange", on);
-  }, []);
-  return route;
-}

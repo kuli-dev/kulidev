@@ -68,6 +68,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/graph", s.graph)
 	mux.HandleFunc("GET /api/component", s.component)
 	mux.HandleFunc("GET /api/search", s.search)
+	mux.HandleFunc("GET /api/tree", s.tree)
+	mux.HandleFunc("GET /api/definition", s.definition)
 	mux.HandleFunc("GET /api/file", s.file)
 	mux.HandleFunc("GET /api/deps", s.deps)
 	mux.HandleFunc("GET /api/broken", s.broken)
@@ -104,7 +106,7 @@ func securityHeaders(next http.Handler) http.Handler {
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
-		h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'")
+		h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:")
 		if r.Method == http.MethodPost {
 			if origin := r.Header.Get("Origin"); origin != "" && !sameHost(origin, r.Host) {
 				fail(w, http.StatusForbidden, "cross-origin request refused")
@@ -157,6 +159,7 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 		"topExternal":   st.TopExternal,
 		"manifests":     st.Manifests,
 		"llm":           s.llm != nil,
+		"model":         modelName(s.llm),
 	})
 }
 
@@ -247,6 +250,37 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	hits, err := s.store.Find(q, intParam(r, "limit", 50, 1, 200))
 	if err != nil {
 		fail(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"hits": nonNil(hits)})
+}
+
+// tree lists every scanned file (path, language, lines) for the explorer and quick open.
+func (s *Server) tree(w http.ResponseWriter, r *http.Request) {
+	s.mu.RLock()
+	files := s.snap.Files
+	s.mu.RUnlock()
+	type entry struct {
+		P string `json:"p"`
+		L string `json:"l,omitempty"`
+		N int    `json:"n"`
+	}
+	out := make([]entry, 0, len(files))
+	for _, f := range files {
+		out = append(out, entry{f.Path, f.Lang, f.Lines})
+	}
+	writeJSON(w, map[string]any{"files": out})
+}
+
+func (s *Server) definition(w http.ResponseWriter, r *http.Request) {
+	name := strings.TrimSpace(r.URL.Query().Get("name"))
+	if name == "" || len(name) > 200 {
+		fail(w, http.StatusBadRequest, "name required")
+		return
+	}
+	hits, err := s.store.Definitions(name, 10)
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	writeJSON(w, map[string]any{"hits": nonNil(hits)})
@@ -417,6 +451,13 @@ func (s *Server) rescan(w http.ResponseWriter, r *http.Request) {
 	}
 	log.Printf("rescanned %s: %d files in %s", s.root, len(res.Files), res.Duration.Round(time.Millisecond))
 	writeJSON(w, map[string]any{"files": len(res.Files), "ms": res.Duration.Milliseconds()})
+}
+
+func modelName(c docs.Chatter) string {
+	if c == nil {
+		return ""
+	}
+	return c.Model()
 }
 
 func intParam(r *http.Request, name string, def, lo, hi int) int {

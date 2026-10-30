@@ -7,7 +7,7 @@ export type Overview = {
   repo: string; root: string; commit: string; head: string; stale: boolean; scannedAt: string;
   files: number; parsed: number; languages: Count[] | null; symbols: Count[] | null;
   internalEdges: number; externalMods: number; topInternal: Count[] | null; topExternal: Count[] | null;
-  manifests: Count[] | null; llm: boolean;
+  manifests: Count[] | null; llm: boolean; model?: string;
 };
 
 export type GraphNode = { name: string; files: number; lines: number; lang: string; hub: string; hubImporters: number; hubDoc?: string };
@@ -30,6 +30,8 @@ export type DocItem = {
   citation_coverage: number; status: string; changed?: string[];
 };
 
+export type TreeFile = { p: string; l?: string; n: number };
+
 export type AskResult = { answer: string; keywords: string[]; citations: number; removed: number; coverage: number; hits: number };
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
@@ -47,6 +49,8 @@ export const api = {
   component: (name: string) => call<Component>(`api/component?name=${q(name)}`),
   search: (text: string) => call<{ hits: Hit[] }>(`api/search?q=${q(text)}&limit=60`),
   file: (path: string) => call<FileView>(`api/file?path=${q(path)}`),
+  tree: () => call<{ files: TreeFile[] }>("api/tree"),
+  definition: (name: string) => call<{ hits: Hit[] }>(`api/definition?name=${q(name)}`),
   broken: () => call<{ hits: Hit[] }>("api/broken"),
   docs: () => call<{ docs: DocItem[] | null; hint?: string }>("api/docs"),
   doc: (name: string) => call<{ markdown: string }>(`api/docs/${q(name)}`),

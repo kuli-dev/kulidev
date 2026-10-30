@@ -32,6 +32,15 @@ the workspace, IDE and remote features are layered on top.
 - [x] `kuli serve`: embedded React app — overview, component map (React Flow + dagre), search, file viewer with cited-line highlighting, docs with freshness, ask, broken imports
 - [ ] Persistent terminals + agent sessions that survive client disconnects
 
+## v0.5 — Workbench (VS Code-style)
+- [x] Activity bar, explorer tree, tabs, breadcrumbs, status bar, Ctrl+P quick open
+- [x] Monaco editor (read-only) with knowledge hover + cross-file go-to-definition
+- [x] Outline / Imported by panels; Ask Kuli chat panel; Map, Docs, Welcome as tabs
+- [ ] Edit + save files (optimistic revision checks, per the sync spec)
+- [ ] Integrated terminal (xterm.js + server PTY), persistent across reconnects
+- [ ] Agent sessions (Claude Code, Codex, …) in the workbench, with kuli MCP attached
+- [ ] Lazy-load Monaco so the first paint doesn't wait for 1 MB of editor
+
 ## Later
 - Desktop shell (Tauri), mobile PWA, remote workspaces + device pairing, Postgres for teams,
   more languages via parser plugins.

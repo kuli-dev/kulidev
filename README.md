@@ -75,22 +75,27 @@ definition covers, and shows the model the relevant code (long functions are cut
 the lines that matter). Citations are validated exactly like DocsMana's. Without a model,
 `kuli ask` prints the evidence it found.
 
-## Web UI — `kuli serve`
+## Workbench — `kuli serve`
 
 ```sh
 kuli serve            # http://127.0.0.1:7878
 ```
 
-- **Overview**: language mix, the files everything depends on, third-party modules, infra files.
-- **Map**: interactive component graph; click a component to see what it depends on, who
-  uses it, and its files with their doc comments.
-- **Search** and a **file viewer** where cited lines are highlighted — every citation in
-  docs and answers opens here.
-- **Docs** (DocsMana output with stale warnings), **Ask**, and **Issues** (broken imports).
+A VS Code-style workbench over the knowledge graph (read-only for now):
+
+- **Explorer** tree, **Ctrl+P** quick open, editor **tabs** with breadcrumbs, and the
+  Monaco editor (VS Code's editor) with syntax highlighting.
+- **Knowledge in the editor**: hover a name to see where it's defined and its doc comment;
+  **Ctrl+click** jumps to the definition in any file (same-language matches first).
+- **Outline** and **Imported by** for the active file, docked under the explorer.
+- **Ask Kuli** chat panel (**Ctrl+L**): answers cite lines; clicking a citation opens the
+  file with those lines highlighted.
+- **Map** (component graph), **Docs** (with stale warnings), **Issues** (broken imports) and
+  a **Welcome** overview as tabs or side views. **Ctrl+Shift+F** search, **Ctrl+B** side bar.
 
 It binds to localhost by default because it shows your source code; the API refuses
 cross-origin writes, and only files recorded by the scan can be read. The UI (React +
-TypeScript, `web/`) is embedded in the binary — no Node needed to run it.
+TypeScript + Monaco, `web/`) is embedded in the binary — no Node needed to run it.
 
 ## Use it from your coding agent (MCP)
 

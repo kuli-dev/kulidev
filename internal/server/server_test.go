@@ -112,6 +112,17 @@ func TestAPI(t *testing.T) {
 		t.Errorf("doc links not rewritten / front matter kept:\n%s", d.Markdown)
 	}
 
+	var tr struct{ Files []struct{ P string } }
+	get(t, ts, "/api/tree", &tr)
+	if len(tr.Files) != 4 {
+		t.Errorf("tree = %+v", tr)
+	}
+	var def struct{ Hits []store.Hit }
+	get(t, ts, "/api/definition?name=Charge", &def)
+	if len(def.Hits) != 1 || def.Hits[0].Path != "internal/payment/pay.go" || def.Hits[0].Line != 4 {
+		t.Errorf("definition = %+v", def)
+	}
+
 	if code := get(t, ts, "/api/nope", nil); code != 404 {
 		t.Errorf("unknown endpoint = %d", code)
 	}
