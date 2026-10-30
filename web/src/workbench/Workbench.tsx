@@ -345,12 +345,12 @@ export function Workbench() {
     { id: "term-toggle", menu: "Terminal", label: termOpen ? "Hide Terminal" : "Show Terminal", keys: "Ctrl+`", run: () => setTermOpen((o) => !o), disabled: !canTerm },
     { id: "term-agents", menu: "Terminal", label: "Start a Coding Agent…", run: show("agents"), disabled: !canTerm },
     { id: "help-cmds", menu: "Help", label: "All Commands", keys: "Ctrl+Shift+P", run: () => setPalette(true) },
-    { id: "help-about", menu: "Help", label: "About KuliDev", run: () => openTab({ kind: "settings" }), sep: true },
+    { id: "help-about", menu: "Help", label: `About KuliDev${ov.data?.version ? ` (${ov.data.version})` : ""}`, run: () => openTab({ kind: "settings" }), sep: true },
   ];
 
   return (
     <div className={`wb ${view ? "" : "no-side"} ${chat ? "with-chat" : ""}`}>
-      <TitleBar commands={commands} center={repo || "KuliDev"} onCenter={() => setQuick(true)} onSettings={() => openTab({ kind: "settings" })}
+      <TitleBar commands={commands} version={ov.data?.version} center={repo || "KuliDev"} onCenter={() => setQuick(true)} onSettings={() => openTab({ kind: "settings" })}
         toggles={{
           side: !!view, onSide: () => setView((v) => (v ? null : "explorer")),
           panel: termOpen, onPanel: canTerm ? () => setTermOpen((o) => !o) : undefined,

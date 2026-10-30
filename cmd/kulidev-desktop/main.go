@@ -79,7 +79,11 @@ func main() {
 		select {}
 	}
 	defer w.Destroy()
-	w.SetTitle("KuliDev")
+	title := "KuliDev"
+	if cli.Version != "" && cli.Version != "dev" {
+		title += " " + cli.Version
+	}
+	w.SetTitle(title)
 	w.SetSize(1440, 920, webview.HintNone)
 	w.Navigate(url)
 	w.Run()

@@ -606,7 +606,7 @@ ul.counts li { display: flex; justify-content: space-between; gap: 1rem; padding
 
 /* Title bar: menus, command center, layout toggles (VS Code style) */
 .titlebar {
-  grid-area: title; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 6px;
+  grid-area: title; display: grid; grid-template-columns: auto auto auto minmax(0, 1fr) auto; align-items: center; gap: 6px;
   height: 35px; padding: 0 6px 0 10px; background: var(--chrome); border-bottom: 1px solid var(--line); font-size: 13px; position: relative; z-index: 30;
 }
 .tb-logo { width: 20px; height: 20px; border-radius: 4px; }
@@ -643,7 +643,7 @@ ul.counts li { display: flex; justify-content: space-between; gap: 1rem; padding
 .qo .qo-cmd { flex: 1; }
 @media (max-width: 900px) {
   .tb-menus, .tb-conn { display: none; }
-  .titlebar { grid-template-columns: auto minmax(0, 1fr) auto; }
+  .titlebar { grid-template-columns: auto auto minmax(0, 1fr) auto; }
 }
 
 /* Markdown / Mermaid preview beside the editor */
@@ -745,3 +745,6 @@ figure.mmd { margin: 1.2rem 0; padding: 12px; border: 1px solid var(--line); bor
 .cursor-ask { width: min(560px, 100%); }
 .cursor-ask p { margin: 0; }
 .cursor-ask pre { margin: 0; font-size: 12px; overflow-x: auto; }
+.docs-scope { display: grid; gap: 4px; margin: 0 0 10px; }
+.docs-scope select { font: inherit; font-size: 13px; padding: 5px 7px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 4px; }
+.tb-version { font-family: var(--mono); font-size: 11px; color: var(--muted); padding: 0 6px; white-space: nowrap; }

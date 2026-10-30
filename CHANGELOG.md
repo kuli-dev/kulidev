@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.3.1 (2026-10-31)
+
+Windows terminal and agents, docs from the app (per project too), Cursor CLI.
+
+- **Docs for folders of several projects**: a **System overview** (what each project is,
+  how they connect, where to start; every link cites the code, no model needed) and
+  documents for each project, chosen with "Documents for" in the Docs panel; **Generate
+  all projects** writes them all in one run with one progress bar.
+- **Version in the app**: in the window title, next to the menus, and in Help > About.
 
 - **Cursor CLI** (`agent`, or `cursor-agent` on older installs) in Agents and Pulse. Its
   first start asks before adding KuliDev to `~/.cursor/mcp.json` — one entry,

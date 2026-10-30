@@ -1,9 +1,10 @@
 import { api } from "../api";
 import { useLoad } from "../hooks";
 import { Markdown } from "../markdown";
+import { docScope } from "./files";
 
 export function DocTab({ name }: { name: string }) {
-  const list = useLoad(api.docs, []);
+  const list = useLoad(() => api.docs(docScope(name)), [name]);
   const doc = useLoad(() => api.doc(name), [name]);
   const meta = list.data?.docs?.find((d) => d.file === name);
   return (

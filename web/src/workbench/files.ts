@@ -28,7 +28,7 @@ export type Tab =
 export type NewTab = Tab extends infer T ? (T extends Tab ? Omit<T, "id"> : never) : never;
 
 export const tabTitle = (t: Tab) =>
-  t.kind === "welcome" ? "Welcome" : t.kind === "map" ? "Map" : t.kind === "systems" ? "Systems" : t.kind === "settings" ? "Settings" : t.kind === "review" ? "Review" : t.kind === "doc" ? t.name.replace(/\.md$/, "").replace(/-/g, " ")
+  t.kind === "welcome" ? "Welcome" : t.kind === "map" ? "Map" : t.kind === "systems" ? "Systems" : t.kind === "settings" ? "Settings" : t.kind === "review" ? "Review" : t.kind === "doc" ? docTitle(t.name)
     : t.kind === "diff" ? `${t.path.split("/").pop()} (${t.staged ? "staged" : "changes"})` : t.path.split("/").pop()!;
 
 // Subsequence fuzzy match for quick open: rewards consecutive and basename matches.
@@ -50,3 +50,13 @@ export function fuzzyScore(query: string, path: string): number {
   }
   return j === q.length ? score - p.length / 100 : -1;
 }
+
+// "projects/worker/getting-started.md" → "getting started (worker)".
+export function docTitle(name: string): string {
+  const parts = name.replace(/\.md$/, "").split("/");
+  const doc = parts.pop()!.replace(/-/g, " ");
+  return parts[0] === "projects" && parts.length > 1 ? `${doc} (${parts.slice(1).join("/")})` : doc;
+}
+
+// The Docs scope a document belongs to: "" for the folder, else the project path.
+export const docScope = (name: string) => (name.startsWith("projects/") ? name.slice(9, name.lastIndexOf("/")) : "");

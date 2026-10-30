@@ -39,7 +39,7 @@ export function Launcher({ onOpened }: { onOpened: () => void }) {
   const idle = [Icon.search, Icon.git, Icon.docs, Icon.issues];
   return (
     <div className="wb">
-      <TitleBar commands={commands} center="Open a folder" onCenter={() => setBrowse(true)} />
+      <TitleBar commands={commands} version={ws.info?.version} center="Open a folder" onCenter={() => setBrowse(true)} />
       <nav className="activity" aria-label="Views">
         <button className="act on" title="Explorer" aria-label="Explorer" aria-pressed="true"><Icon.files /></button>
         {idle.map((I, i) => (

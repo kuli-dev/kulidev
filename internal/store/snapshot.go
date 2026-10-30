@@ -1,6 +1,7 @@
 package store
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/kuli-dev/kulidev/internal/scan"
@@ -123,4 +124,59 @@ func (s *Store) LoadSnapshot() (*Snapshot, error) {
 		snap.Manifests[k] = append(snap.Manifests[k], p)
 	}
 	return snap, rows.Err()
+}
+
+// Sub is the part of the snapshot under dir (a project inside the scanned folder),
+// re-rooted there: paths become relative to dir. Imports reaching outside dir are left
+// out; the Systems map describes those.
+func (s *Snapshot) Sub(dir string) *Snapshot {
+	dir = strings.Trim(dir, "/")
+	pre := dir + "/"
+	in := func(p string) (string, bool) {
+		if strings.HasPrefix(p, pre) {
+			return p[len(pre):], true
+		}
+		return "", false
+	}
+	out := &Snapshot{Run: s.Run, External: map[string]int{}, Manifests: map[string][]string{}}
+	out.Run.Root = filepath.Join(s.Run.Root, filepath.FromSlash(dir))
+	out.Run.Files = 0
+	for _, f := range s.Files {
+		if p, ok := in(f.Path); ok {
+			f.Path = p
+			out.Files = append(out.Files, f)
+			out.Run.Files++
+		}
+	}
+	for _, y := range s.Symbols {
+		if p, ok := in(y.Path); ok {
+			y.Path = p
+			out.Symbols = append(out.Symbols, y)
+		}
+	}
+	for _, im := range s.Imports {
+		from, ok1 := in(im.From)
+		to, ok2 := in(im.To)
+		if ok1 && ok2 {
+			out.Imports = append(out.Imports, ImportPair{from, to, im.Line})
+		}
+	}
+	seen := map[[2]string]bool{}
+	for _, im := range s.ExternalImports {
+		if from, ok := in(im.From); ok {
+			out.ExternalImports = append(out.ExternalImports, ImportPair{from, im.To, im.Line})
+			if k := [2]string{from, im.To}; !seen[k] {
+				seen[k] = true
+				out.External[im.To]++
+			}
+		}
+	}
+	for kind, paths := range s.Manifests {
+		for _, p := range paths {
+			if q, ok := in(p); ok {
+				out.Manifests[kind] = append(out.Manifests[kind], q)
+			}
+		}
+	}
+	return out
 }

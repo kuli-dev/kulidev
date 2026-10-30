@@ -127,7 +127,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/deps", s.deps)
 	mux.HandleFunc("GET /api/broken", s.broken)
 	mux.HandleFunc("GET /api/docs", s.docsList)
-	mux.HandleFunc("GET /api/docs/{file}", s.docsGet)
+	mux.HandleFunc("GET /api/docs/{file...}", s.docsGet)
 	mux.HandleFunc("GET /api/docs-job", s.docsJobStatus)
 	mux.HandleFunc("POST /api/docs-job", s.docsGenerate)
 	mux.HandleFunc("POST /api/docs-job/cancel", s.docsCancel)
@@ -289,6 +289,7 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 		"llm":           s.chatter() != nil,
 		"model":         modelName(s.chatter()),
 		"readOnly":      s.readOnly,
+		"version":       s.version,
 		"terminals":     s.terms != nil,
 	})
 }
@@ -560,33 +561,96 @@ func (s *Server) broken(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) knowledgeDir() string { return filepath.Join(s.dataDir, "knowledge") }
 
-func (s *Server) docsList(w http.ResponseWriter, r *http.Request) {
-	fr, err := docs.Status(s.knowledgeDir(), s.root)
+// docScope maps a Docs scope to where its documents live: "" is the whole folder;
+// a project path (from the Systems map) has its own documents under projects/<path>.
+func (s *Server) docScope(scope string) (outDir, root string, snap *store.Snapshot, err error) {
+	s.mu.RLock()
+	full := s.snap
+	s.mu.RUnlock()
+	if scope == "" {
+		return s.knowledgeDir(), s.root, full, nil
+	}
+	for _, p := range s.buildSystems(full).Projects {
+		if p.Path == scope && p.Path != "" {
+			return filepath.Join(s.knowledgeDir(), "projects", filepath.FromSlash(p.Path)),
+				filepath.Join(s.root, filepath.FromSlash(p.Path)), full.Sub(p.Path), nil
+		}
+	}
+	return "", "", nil, errors.New("no such project in this folder")
+}
+
+type docItem struct {
+	docs.DocResult
+	Status  string   `json:"status"`
+	Changed []string `json:"changed,omitempty"`
+}
+
+func (s *Server) docItems(scope string) []docItem {
+	out := []docItem{}
+	dir, root, _, err := s.docScope(scope)
 	if err != nil {
-		writeJSON(w, map[string]any{"docs": []any{}})
-		return
+		return out
 	}
-	type item struct {
-		docs.DocResult
-		Status  string   `json:"status"`
-		Changed []string `json:"changed,omitempty"`
+	fr, err := docs.Status(dir, root)
+	if err != nil {
+		return out
 	}
-	var out []item
 	for _, f := range fr {
-		out = append(out, item{f.Doc, f.Status, f.Changed})
+		it := docItem{f.Doc, f.Status, f.Changed}
+		if scope != "" {
+			it.File = "projects/" + scope + "/" + it.File // names are relative to the knowledge folder
+		}
+		out = append(out, it)
 	}
-	writeJSON(w, map[string]any{"docs": out})
+	return out
+}
+
+type docsProject struct {
+	Path  string `json:"path"`
+	Name  string `json:"name"`
+	Docs  int    `json:"docs"`
+	Stale int    `json:"stale"`
+}
+
+func (s *Server) docsList(w http.ResponseWriter, r *http.Request) {
+	scope := r.URL.Query().Get("scope")
+	resp := map[string]any{"docs": s.docItems(scope), "scope": scope}
+	// A folder of several projects: each can have its own documents.
+	s.mu.RLock()
+	snap := s.snap
+	s.mu.RUnlock()
+	if m := s.buildSystems(snap); len(m.Projects) >= 2 {
+		var ps []docsProject
+		for _, p := range m.Projects {
+			if p.Path == "" {
+				continue
+			}
+			dp := docsProject{Path: p.Path, Name: p.Name}
+			for _, d := range s.docItems(p.Path) {
+				dp.Docs++
+				if d.Status == "STALE" {
+					dp.Stale++
+				}
+			}
+			ps = append(ps, dp)
+		}
+		resp["projects"] = ps
+	}
+	writeJSON(w, resp)
 }
 
 var mdLinkRe = regexp.MustCompile(`\]\(([^)\s]+)\)`)
 
 func (s *Server) docsGet(w http.ResponseWriter, r *http.Request) {
 	name := r.PathValue("file")
-	if name != path.Base(name) || !strings.HasSuffix(name, ".md") {
+	// "overview.md", or "projects/<project>/overview.md" for a project's documents.
+	if clean := path.Clean(name); clean != name || strings.HasPrefix(name, "/") || strings.Contains(name, "..") ||
+		!strings.HasSuffix(name, ".md") || (strings.Contains(name, "/") && !strings.HasPrefix(name, "projects/")) {
 		fail(w, http.StatusBadRequest, "bad document name")
 		return
 	}
-	b, err := os.ReadFile(filepath.Join(s.knowledgeDir(), name))
+	full := filepath.Join(s.knowledgeDir(), filepath.FromSlash(name))
+	b, err := os.ReadFile(full)
 	if err != nil {
 		fail(w, http.StatusNotFound, "no such document")
 		return
@@ -599,7 +663,7 @@ func (s *Server) docsGet(w http.ResponseWriter, r *http.Request) {
 			return m
 		}
 		file, anchor, _ := strings.Cut(target, "#")
-		abs := filepath.Clean(filepath.Join(s.knowledgeDir(), filepath.FromSlash(strings.ReplaceAll(file, "%20", " "))))
+		abs := filepath.Clean(filepath.Join(filepath.Dir(full), filepath.FromSlash(strings.ReplaceAll(file, "%20", " "))))
 		rel, err := filepath.Rel(s.root, abs)
 		if err != nil || strings.HasPrefix(rel, "..") {
 			return m

@@ -106,7 +106,8 @@ func Generate(ctx context.Context, snap *store.Snapshot, opts Options) (*Manifes
 	// Keep entries for documents not regenerated this run.
 	if prev, err := ReadManifest(opts.OutDir); err == nil {
 		for _, d := range prev.Docs {
-			if len(want) > 0 && !want[d.ID] {
+			// Documents this run doesn't write (others, or the System overview) stay listed.
+			if len(want) > 0 && !want[d.ID] || !isDocID(d.ID) {
 				m.Docs = append(m.Docs, d)
 			}
 		}
@@ -139,7 +140,19 @@ func Generate(ctx context.Context, snap *store.Snapshot, opts Options) (*Manifes
 	return m, nil
 }
 
+func isDocID(id string) bool {
+	for _, d := range DocIDs {
+		if d == id {
+			return true
+		}
+	}
+	return false
+}
+
 func docOrder(id string) int {
+	if id == SystemID {
+		return -1 // first: how the projects fit together
+	}
 	for i, d := range DocIDs {
 		if d == id {
 			return i

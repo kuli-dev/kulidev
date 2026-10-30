@@ -174,9 +174,17 @@ const DOC_NAMES: Record<string, string> = {
 
 // Docs: what KuliDev wrote about this folder, and the button that writes or refreshes
 // them (same engine as `kuli docs`), with progress and Stop.
+// Docs: what KuliDev wrote about this folder, and the button that writes or refreshes
+// them (same engine as `kuli docs`), with progress and Stop. A folder of several
+// projects also has a System overview and documents for each project (the scope).
 export function DocsPane({ onOpenDoc, model }: { onOpenDoc: (name: string) => void; model: string }) {
-  const d = useLoad(api.docs, []);
+  const [scope, setScopeState] = useState(() => {
+    try { return sessionStorage.getItem("kuli.docscope") ?? ""; } catch { return ""; }
+  });
+  const setScope = (v: string) => { setScopeState(v); try { sessionStorage.setItem("kuli.docscope", v); } catch { /* storage off */ } };
+  const d = useLoad(() => api.docs(scope), [scope]);
   const docs = d.data?.docs ?? [];
+  const projects = d.data?.projects ?? [];
   const [job, setJob] = useState<DocsJob | null>(null);
   const [factsOnly, setFactsOnly] = useState(false);
   const [error, setError] = useState("");
@@ -194,32 +202,48 @@ export function DocsPane({ onOpenDoc, model }: { onOpenDoc: (name: string) => vo
     return () => window.clearTimeout(t);
   }, [job?.running]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function generate(only?: string[]) {
+  async function generate(opts: { only?: string[]; scope?: string } = {}) {
     setError("");
     try {
       wasRunning.current = true; // even a run that ends before the first poll reloads the list
-      setJob(await api.generateDocs({ only, factsOnly: factsOnly || !model }));
+      setJob(await api.generateDocs({ scope, ...opts, factsOnly: factsOnly || !model }));
     } catch (e) {
       setError((e as Error).message);
     }
   }
-  const stale = docs.filter((x) => x.status === "STALE").map((x) => x.id);
+  const stale = docs.filter((x) => x.status === "STALE").map((x) => x.id).filter((id) => id !== "system-overview");
   const running = !!job?.running;
   const pct = job && job.total ? Math.round((job.done / job.total) * 100) : 0;
+  const current = (job?.current ?? "").replace(/(^|: )([a-z-]+)$/, (_, pre, id) => pre + (DOC_NAMES[id] ?? id.replace(/-/g, " ")));
+  const scopeName = scope ? projects.find((p) => p.path === scope)?.name ?? scope : "";
 
   return (
     <div className="pane">
       <h2 className="pane-title">Docs</h2>
+      {projects.length > 0 && (
+        <label className="docs-scope pad-x">
+          <span className="small muted">Documents for</span>
+          <select value={scope} onChange={(e) => setScope(e.target.value)}>
+            <option value="">Whole folder ({projects.length} projects)</option>
+            {projects.map((p) => (
+              <option key={p.path} value={p.path}>{p.name}{p.docs ? ` (${p.docs} docs${p.stale ? `, ${p.stale} stale` : ""})` : " (no docs yet)"}</option>
+            ))}
+          </select>
+        </label>
+      )}
       {d.data && docs.length === 0 && !running && (
         <p className="muted small pad-x">
-          KuliDev can write documents about this folder (overview, architecture, dependencies, infrastructure, getting started)
-          from what it read, citing the code for every claim.
+          {scope
+            ? `KuliDev can write documents about ${scopeName} on its own: overview, architecture, dependencies, infrastructure, getting started.`
+            : projects.length > 0
+              ? "For this folder KuliDev writes a System overview (how the projects connect, from the Systems map) and documents about the folder as a whole. Each project can also get its own: pick it above, or generate all."
+              : "KuliDev can write documents about this folder (overview, architecture, dependencies, infrastructure, getting started) from what it read, citing the code for every claim."}
         </p>
       )}
       <div className="docs-gen pad-x">
         {running ? (
           <>
-            <p className="small">Writing {DOC_NAMES[job!.current ?? ""] ?? job!.current ?? "…"} ({Math.min(job!.done + 1, job!.total)} of {job!.total})</p>
+            <p className="small">Writing {current || "…"} ({Math.min(job!.done + 1, job!.total)} of {job!.total})</p>
             <div className="progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${pct}%` }} /></div>
             <p className="muted small docs-line">{job!.lines[job!.lines.length - 1]}</p>
             <button className="btn small-btn" onClick={() => api.cancelDocs().catch(() => {})}>Stop</button>
@@ -227,12 +251,18 @@ export function DocsPane({ onOpenDoc, model }: { onOpenDoc: (name: string) => vo
         ) : (
           <>
             <div className="docs-actions">
-              <button className="btn primary small-btn" onClick={() => generate()}>{docs.length ? "Regenerate all" : "Generate docs"}</button>
-              {stale.length > 0 && <button className="btn small-btn" onClick={() => generate(stale)}>Refresh {stale.length} stale</button>}
+              <button className="btn primary small-btn" onClick={() => generate()}>
+                {docs.length ? "Regenerate" : "Generate docs"}{scope ? ` for ${scopeName}` : ""}
+              </button>
+              {stale.length > 0 && <button className="btn small-btn" onClick={() => generate({ only: stale })}>Refresh {stale.length} stale</button>}
+              {!scope && projects.length > 0 && (
+                <button className="btn small-btn" onClick={() => generate({ scope: "*" })}>Generate all projects</button>
+              )}
             </div>
             <p className="muted small">
-              {model && !factsOnly ? <>Written by {model}; code excerpts from this folder are sent to it.</> : "Facts only: no model is used."}
+              {model && !factsOnly ? <>Written by {model}; code excerpts are sent to it.</> : "Facts only: no model is used."}
               {!model && <> Set a model in Settings for written explanations.</>}
+              {!scope && projects.length > 0 && " The System overview never needs a model."}
             </p>
             {model && (
               <label className="small check"><input type="checkbox" checked={factsOnly} onChange={(e) => setFactsOnly(e.target.checked)} /> Facts only (don't use the model)</label>

@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ type docsJob struct {
 	mu       sync.Mutex
 	running  bool
 	current  string // document being written
+	prefix   string // the project being documented, in "all projects" runs
 	done     int    // documents finished
 	total    int
 	model    string
@@ -59,7 +61,7 @@ func (j *docsJob) Write(p []byte) (int, error) {
 			if j.current != "" {
 				j.done++
 			}
-			j.current = strings.TrimSuffix(id, "…")
+			j.current = j.prefix + strings.TrimSuffix(id, "…")
 		}
 		j.lines = append(j.lines, line)
 		if len(j.lines) > 40 {
@@ -77,6 +79,8 @@ func (s *Server) docsGenerate(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Only      []string `json:"only"`
 		FactsOnly bool     `json:"factsOnly"` // no model: documents built from the facts alone
+		// Scope: "" the whole folder, a project path, or "*" for the folder and every project.
+		Scope string `json:"scope"`
 	}
 	json.NewDecoder(http.MaxBytesReader(w, r.Body, 8<<10)).Decode(&req)
 	for _, id := range req.Only {
@@ -89,9 +93,27 @@ func (s *Server) docsGenerate(w http.ResponseWriter, r *http.Request) {
 	if req.FactsOnly {
 		model = nil
 	}
+	type step struct{ scope, label string }
+	var steps []step
 	s.mu.RLock()
-	snap := s.snap
+	full := s.snap
 	s.mu.RUnlock()
+	projects := s.buildSystems(full)
+	system := len(projects.Projects) >= 2 && (req.Scope == "" || req.Scope == "*")
+	if req.Scope == "*" {
+		steps = append(steps, step{"", ""})
+		for _, p := range projects.Projects {
+			if p.Path != "" {
+				steps = append(steps, step{p.Path, p.Name + ": "})
+			}
+		}
+	} else {
+		if _, _, _, err := s.docScope(req.Scope); err != nil {
+			fail(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		steps = append(steps, step{req.Scope, ""})
+	}
 
 	j := &s.docs
 	j.mu.Lock()
@@ -101,9 +123,13 @@ func (s *Server) docsGenerate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	total := len(docs.DocIDs)
+	per := len(docs.DocIDs)
 	if len(req.Only) > 0 {
-		total = len(req.Only)
+		per = len(req.Only)
+	}
+	total := per * len(steps)
+	if system {
+		total++
 	}
 	// Reset field by field: the struct holds the mutex that is locked right now.
 	j.running, j.current, j.done, j.total, j.lines, j.err = true, "", 0, total, []string{}, ""
@@ -115,7 +141,31 @@ func (s *Server) docsGenerate(w http.ResponseWriter, r *http.Request) {
 
 	go func() {
 		defer cancel()
-		_, err := docs.Generate(ctx, snap, docs.Options{OutDir: s.knowledgeDir(), LLM: model, Only: req.Only, Version: s.version, Log: j})
+		var err error
+		for i, st := range steps {
+			if ctx.Err() != nil {
+				break
+			}
+			j.mu.Lock()
+			j.prefix = st.label
+			j.mu.Unlock()
+			dir, _, snap, e := s.docScope(st.scope)
+			if e == nil {
+				_, e = docs.Generate(ctx, snap, docs.Options{OutDir: dir, LLM: model, Only: req.Only, Version: s.version, Log: j})
+			}
+			if e != nil && ctx.Err() == nil {
+				err = fmt.Errorf("%s%v", st.label, e)
+				break
+			}
+			// The System overview follows the folder's own documents (no model needed).
+			if i == 0 && system && ctx.Err() == nil {
+				j.Write([]byte("writing system overview…\n"))
+				if _, e := docs.SystemOverview(projects, s.root, s.knowledgeDir(), s.version); e != nil {
+					err = e
+					break
+				}
+			}
+		}
 		j.mu.Lock()
 		defer j.mu.Unlock()
 		j.running, j.finished, j.current = false, time.Now(), ""

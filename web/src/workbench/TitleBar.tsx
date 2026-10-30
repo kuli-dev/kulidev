@@ -20,8 +20,9 @@ export const editorAction = (id: string) => dispatchEvent(new CustomEvent("kuli-
 
 const isLocal = () => ["localhost", "127.0.0.1", "[::1]", "::1"].includes(location.hostname);
 
-export function TitleBar({ commands, center, onCenter, toggles, onSettings }: {
+export function TitleBar({ commands, center, onCenter, toggles, onSettings, version }: {
   commands: Command[];
+  version?: string;
   center: string;
   onCenter: () => void;
   toggles?: { side: boolean; panel?: boolean; chat: boolean; onSide: () => void; onPanel?: () => void; onChat: () => void };
@@ -42,7 +43,7 @@ export function TitleBar({ commands, center, onCenter, toggles, onSettings }: {
 
   return (
     <header className="titlebar" ref={bar}>
-      <img className="tb-logo" src="/mark.png" alt="KuliDev" />
+      <img className="tb-logo" src="/mark.png" alt="KuliDev" title={version ? `KuliDev ${version}` : "KuliDev"} />
       <nav className="tb-menus" role="menubar" aria-label="Menu">
         {menus.map((m) => (
           <div key={m} className="tb-menu">
@@ -66,6 +67,7 @@ export function TitleBar({ commands, center, onCenter, toggles, onSettings }: {
           </div>
         ))}
       </nav>
+      <span className="tb-version" title={version ? "The KuliDev version you are running" : undefined}>{version ?? ""}</span>
       <button className="tb-center" onClick={onCenter} title="Go to file (Ctrl+P)">
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
           <circle cx="11" cy="11" r="6.5" /><path d="m20 20-4.2-4.2" />

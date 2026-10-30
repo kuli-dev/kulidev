@@ -368,7 +368,7 @@ func (h *Host) workspaceInfo(w http.ResponseWriter, r *http.Request) {
 	root := h.Root()
 	writeJSON(w, map[string]any{
 		"open": root != "", "root": root, "name": filepath.Base(root),
-		"canOpen": h.canOpen, "recent": h.loadRecent(), "os": runtime.GOOS, "opening": h.Job(),
+		"canOpen": h.canOpen, "recent": h.loadRecent(), "os": runtime.GOOS, "opening": h.Job(), "version": h.version,
 	})
 }
 

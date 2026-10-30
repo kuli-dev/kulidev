@@ -7,7 +7,7 @@ export type Overview = {
   repo: string; root: string; commit: string; head: string; stale: boolean; scannedAt: string;
   files: number; parsed: number; languages: Count[] | null; symbols: Count[] | null;
   internalEdges: number; externalMods: number; topInternal: Count[] | null; topExternal: Count[] | null;
-  manifests: Count[] | null; llm: boolean; model?: string; readOnly?: boolean; terminals?: boolean;
+  manifests: Count[] | null; llm: boolean; model?: string; readOnly?: boolean; terminals?: boolean; version?: string;
 };
 
 export type GraphNode = { name: string; files: number; lines: number; lang: string; hub: string; hubImporters: number; hubDoc?: string };
@@ -65,6 +65,7 @@ export type SettingsInfo = {
 };
 export type LLMInput = { baseURL: string; model: string; reasoningEffort: string; maxTokens: number; apiKey?: string; clearKey?: boolean };
 
+export type DocsProject = { path: string; name: string; docs: number; stale: number };
 export type DocsJob = {
   running: boolean; current?: string; done: number; total: number; model?: string; lines: string[]; error?: string; finished?: string;
 };
@@ -76,6 +77,7 @@ export type OpenJob = {
 };
 export type WorkspaceInfo = {
   open: boolean; root: string; name: string; canOpen: boolean; recent: RecentFolder[] | null; os: string; opening: OpenJob | null;
+  version?: string;
 };
 export type DirList = { path: string; parent: string; home: string; isRepo: boolean; dirs: { name: string; path: string; isRepo: boolean }[]; drives?: string[] };
 
@@ -110,10 +112,10 @@ export const api = {
   tree: () => call<{ files: TreeFile[] }>("api/tree"),
   definition: (name: string) => call<{ hits: Hit[] }>(`api/definition?name=${q(name)}`),
   broken: () => call<{ hits: Hit[] }>("api/broken"),
-  docs: () => call<{ docs: DocItem[] | null; hint?: string }>("api/docs"),
+  docs: (scope = "") => call<{ docs: DocItem[] | null; scope: string; projects?: DocsProject[] }>(`api/docs?scope=${q(scope)}`),
   doc: (name: string) => call<{ markdown: string }>(`api/docs/${q(name)}`),
   docsJob: () => call<DocsJob>("api/docs-job"),
-  generateDocs: (opts: { only?: string[]; factsOnly?: boolean }) =>
+  generateDocs: (opts: { only?: string[]; factsOnly?: boolean; scope?: string }) =>
     call<DocsJob>("api/docs-job", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(opts) }),
   cancelDocs: () => call<{ ok: boolean }>("api/docs-job/cancel", { method: "POST" }),
   ask: (question: string) =>
