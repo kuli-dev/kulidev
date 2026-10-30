@@ -29,6 +29,8 @@ func TestGitAcrossRepos(t *testing.T) {
 		os.MkdirAll(dir, 0o755)
 		git(dir, "init", "-q", "-b", "main")
 		git(dir, "config", "core.autocrlf", "false")
+		git(dir, "config", "user.name", "t") // CI runners have no identity; the server commits too
+		git(dir, "config", "user.email", "t@t")
 		os.WriteFile(filepath.Join(dir, "main.py"), []byte("x = 1\n"), 0o644)
 		git(dir, "add", ".")
 		git(dir, "commit", "-q", "-m", "init")
