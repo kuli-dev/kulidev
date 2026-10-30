@@ -140,8 +140,8 @@ ul.plain { list-style: none; padding: 0; margin: 0; }
 .wb {
   display: grid; height: 100%;
   grid-template-columns: 48px 280px minmax(0, 1fr) 0;
-  grid-template-rows: minmax(0, 1fr) 24px;
-  grid-template-areas: "act side editor chat" "status status status status";
+  grid-template-rows: 35px minmax(0, 1fr) 24px;
+  grid-template-areas: "title title title title" "act side editor chat" "status status status status";
 }
 .wb.no-side { grid-template-columns: 48px 0 minmax(0, 1fr) 0; }
 .wb.with-chat { grid-template-columns: 48px 280px minmax(0, 1fr) 400px; }
@@ -538,9 +538,9 @@ ul.counts li { display: flex; justify-content: space-between; gap: 1rem; padding
 /* Narrow screens: hide the side bar column unless toggled; chat overlays. */
 @media (max-width: 900px) {
   .wb, .wb.with-chat { grid-template-columns: 48px 0 minmax(0, 1fr) 0; }
-  .wb:not(.no-side) .side { position: fixed; left: 48px; top: 0; bottom: 24px; width: min(300px, 80vw); z-index: 20; box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3); }
+  .wb:not(.no-side) .side { position: fixed; left: 48px; top: 35px; bottom: 24px; width: min(300px, 80vw); z-index: 20; box-shadow: 4px 0 20px rgba(0, 0, 0, 0.3); }
   .wb.with-chat .chat { position: fixed; right: 0; top: 0; bottom: 24px; width: min(420px, 100vw); z-index: 30; }
-  .side-backdrop { position: fixed; inset: 0 0 24px 48px; z-index: 15; background: rgba(0, 0, 0, 0.35); }
+  .side-backdrop { position: fixed; inset: 35px 0 24px 48px; z-index: 15; background: rgba(0, 0, 0, 0.35); }
   .st-wide { display: none; }
   .git-actions { display: flex; }
   .review-head, .review-files, .review-bar { padding-left: 12px; padding-right: 12px; }
@@ -603,3 +603,45 @@ ul.counts li { display: flex; justify-content: space-between; gap: 1rem; padding
 .set-facts li > span { color: var(--steel); }
 .set-facts code { overflow-wrap: anywhere; font-size: 12px; }
 @media (max-width: 900px) { .set-facts li { grid-template-columns: 1fr; gap: 2px; } }
+
+/* Title bar: menus, command center, layout toggles (VS Code style) */
+.titlebar {
+  grid-area: title; display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; align-items: center; gap: 6px;
+  height: 35px; padding: 0 6px 0 10px; background: var(--chrome); border-bottom: 1px solid var(--line); font-size: 13px; position: relative; z-index: 30;
+}
+.tb-logo { width: 20px; height: 20px; border-radius: 4px; }
+.tb-menus { display: flex; }
+.tb-menu { position: relative; }
+.tb-menu > button { font: inherit; padding: 4px 8px; background: none; border: 0; border-radius: 4px; color: var(--steel); cursor: pointer; }
+.tb-menu > button:hover, .tb-menu > button.on { background: var(--elevated); color: var(--ink); }
+.tb-drop {
+  position: absolute; top: calc(100% + 4px); left: 0; min-width: 250px; padding: 4px; display: grid;
+  background: var(--elevated); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+.tb-drop button {
+  width: 100%; display: flex; justify-content: space-between; gap: 24px; font: inherit; text-align: left;
+  padding: 5px 10px; background: none; border: 0; border-radius: 4px; color: var(--ink); cursor: pointer; white-space: nowrap;
+}
+.tb-drop button:hover:not(:disabled), .tb-drop button:focus-visible { background: var(--brand-wash); }
+.tb-drop button:disabled { color: var(--muted); cursor: default; }
+.tb-drop kbd, .qo kbd { font-family: var(--mono); font-size: 11px; color: var(--steel); background: none; border: 0; }
+.tb-sep { height: 1px; margin: 4px 6px; background: var(--line); }
+.tb-center {
+  justify-self: center; width: min(520px, 100%); display: flex; align-items: center; justify-content: center; gap: 8px;
+  font: inherit; font-size: 12.5px; padding: 3px 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+  color: var(--steel); cursor: pointer; overflow: hidden;
+}
+.tb-center:hover { border-color: var(--steel); color: var(--ink); }
+.tb-center span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb-right { display: flex; align-items: center; gap: 2px; }
+.tb-conn { display: flex; align-items: center; gap: 6px; padding: 0 10px; color: var(--steel); font-size: 12px; white-space: nowrap; }
+.tb-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--success); }
+.tb-conn.remote .tb-dot { background: var(--info); }
+.tb-icon { display: grid; place-items: center; width: 28px; height: 26px; background: none; border: 0; border-radius: 4px; color: var(--steel); cursor: pointer; }
+.tb-icon:hover { background: var(--elevated); color: var(--ink); }
+.tb-icon.on { color: var(--ink); }
+.qo .qo-cmd { flex: 1; }
+@media (max-width: 900px) {
+  .tb-menus, .tb-conn { display: none; }
+  .titlebar { grid-template-columns: auto minmax(0, 1fr) auto; }
+}

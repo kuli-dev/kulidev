@@ -12,6 +12,8 @@ import { DocTab } from "./DocTab";
 import { clearFileCache, tabTitle, type NewTab, type Tab } from "./files";
 import { Icon } from "./Icons";
 import { DevicesPane } from "./Pair";
+import { CommandPalette, TitleBar, editorAction, type Command } from "./TitleBar";
+import { setThemePref, isDark } from "../theme";
 import { FolderDialog, ProgressBar, RecentPicker, isOpening, progressText, useWorkspace } from "./workspace";
 import { QuickOpen } from "./QuickOpen";
 
@@ -57,6 +59,7 @@ export function Workbench() {
   const [searchQ, setSearchQ] = useState("");
   const [chat, setChat] = useState(false);
   const [quick, setQuick] = useState(false);
+  const [palette, setPalette] = useState(false);
   const [cursor, setCursor] = useState<Cursor | null>(null);
   const [termOpen, setTermOpen] = useState(false);
   const [termH, setTermH] = useState(280);
@@ -245,6 +248,8 @@ export function Workbench() {
       const k = e.key.toLowerCase();
       if (e.key === "`" || e.code === "Backquote") { e.preventDefault(); if (ov.data?.terminals) setTermOpen((o) => !o); }
       else if (k === "p" && !e.shiftKey) { e.preventDefault(); setQuick(true); }
+      else if (k === "p" && e.shiftKey) { e.preventDefault(); setPalette(true); }
+      else if (k === "e" && e.shiftKey) { e.preventDefault(); setView("explorer"); }
       else if (k === "f" && e.shiftKey) { e.preventDefault(); setView("search"); }
       else if (k === "g" && e.shiftKey) { e.preventDefault(); setView("changes"); }
       else if (k === "b") { e.preventDefault(); setView((v) => (v ? null : "explorer")); }
@@ -289,10 +294,56 @@ export function Workbench() {
     { v: "devices", label: "Devices", icon: Icon.devices },
   ];
 
+  const isFile = current?.kind === "file";
+  const canTerm = !!ov.data?.terminals;
+  const show = (v: View) => () => setView(v);
+  const commands: Command[] = [
+    { id: "open-folder", menu: "File", label: "Open Folder…", keys: "Ctrl+O", run: () => setBrowse(true), disabled: !canSwitch },
+    { id: "open-recent", menu: "File", label: "Open Recent…", keys: "Ctrl+R", run: () => setSwitcher(true), disabled: !canSwitch },
+    { id: "save", menu: "File", label: "Save", keys: "Ctrl+S", run: () => editorAction("save"), disabled: !isFile || !!ov.data?.readOnly, sep: true },
+    { id: "close-tab", menu: "File", label: "Close Tab", keys: "Ctrl+Alt+W", run: () => closeTab(active), disabled: !current },
+    { id: "rescan", menu: "File", label: "Rescan Folder", run: rescan, sep: true },
+    { id: "settings", menu: "File", label: "Settings", keys: "Ctrl+,", run: () => openTab({ kind: "settings" }) },
+    { id: "undo", menu: "Edit", label: "Undo", keys: "Ctrl+Z", run: () => editorAction("undo"), disabled: !isFile },
+    { id: "redo", menu: "Edit", label: "Redo", keys: "Ctrl+Y", run: () => editorAction("redo"), disabled: !isFile },
+    { id: "find", menu: "Edit", label: "Find", keys: "Ctrl+F", run: () => editorAction("actions.find"), disabled: !isFile, sep: true },
+    { id: "replace", menu: "Edit", label: "Replace", keys: "Ctrl+H", run: () => editorAction("editor.action.startFindReplaceAction"), disabled: !isFile },
+    { id: "find-files", menu: "Edit", label: "Find in Files", keys: "Ctrl+Shift+F", run: show("search"), sep: true },
+    { id: "palette", menu: "View", label: "Command Palette…", keys: "Ctrl+Shift+P", run: () => setPalette(true) },
+    { id: "v-explorer", menu: "View", label: "Explorer", keys: "Ctrl+Shift+E", run: show("explorer"), sep: true },
+    { id: "v-search", menu: "View", label: "Search", keys: "Ctrl+Shift+F", run: show("search") },
+    { id: "v-changes", menu: "View", label: "Source Control", keys: "Ctrl+Shift+G", run: show("changes") },
+    { id: "v-docs", menu: "View", label: "Docs", run: show("docs") },
+    { id: "v-issues", menu: "View", label: "Issues", run: show("issues") },
+    ...(canTerm ? [
+      { id: "v-pulse", menu: "View" as const, label: "Pulse", run: show("pulse") },
+      { id: "v-agents", menu: "View" as const, label: "Agents", run: show("agents") },
+    ] : []),
+    { id: "v-devices", menu: "View", label: "Devices", run: show("devices") },
+    { id: "v-systems", menu: "View", label: "Systems Diagram", run: () => openTab({ kind: "systems" }), disabled: !projects, sep: true },
+    { id: "v-map", menu: "View", label: "Component Map", run: () => openTab({ kind: "map" }) },
+    { id: "t-side", menu: "View", label: "Toggle Side Bar", keys: "Ctrl+B", run: () => setView((v) => (v ? null : "explorer")), sep: true },
+    { id: "t-chat", menu: "View", label: "Toggle Ask Kuli", keys: "Ctrl+L", run: () => setChat((c) => !c) },
+    { id: "t-theme", menu: "View", label: isDark() ? "Switch to Light Theme" : "Switch to Dark Theme", run: () => setThemePref(isDark() ? "light" : "dark") },
+    { id: "go-file", menu: "Go", label: "Go to File…", keys: "Ctrl+P", run: () => setQuick(true) },
+    { id: "go-line", menu: "Go", label: "Go to Line…", keys: "Ctrl+G", run: () => editorAction("editor.action.gotoLine"), disabled: !isFile },
+    { id: "go-welcome", menu: "Go", label: "Welcome", run: () => openTab({ kind: "welcome" }), sep: true },
+    { id: "go-review", menu: "Go", label: "Review Changes", run: () => openTab({ kind: "review" }) },
+    { id: "term-toggle", menu: "Terminal", label: termOpen ? "Hide Terminal" : "Show Terminal", keys: "Ctrl+`", run: () => setTermOpen((o) => !o), disabled: !canTerm },
+    { id: "term-agents", menu: "Terminal", label: "Start a Coding Agent…", run: show("agents"), disabled: !canTerm },
+    { id: "help-cmds", menu: "Help", label: "All Commands", keys: "Ctrl+Shift+P", run: () => setPalette(true) },
+    { id: "help-about", menu: "Help", label: "About KuliDev", run: () => openTab({ kind: "settings" }), sep: true },
+  ];
+
   return (
     <div className={`wb ${view ? "" : "no-side"} ${chat ? "with-chat" : ""}`}>
+      <TitleBar commands={commands} center={repo || "KuliDev"} onCenter={() => setQuick(true)} onSettings={() => openTab({ kind: "settings" })}
+        toggles={{
+          side: !!view, onSide: () => setView((v) => (v ? null : "explorer")),
+          panel: termOpen, onPanel: canTerm ? () => setTermOpen((o) => !o) : undefined,
+          chat, onChat: () => setChat((c) => !c),
+        }} />
       <nav className="activity" aria-label="Views">
-        <a className="act-mark" href="#/" onClick={(e) => { e.preventDefault(); openTab({ kind: "welcome" }); }} title="Welcome"><img src="/mark.png" alt="KuliDev" /></a>
         {activity.map((a) => (
           <button key={a.v} className={`act ${view === a.v ? "on" : ""}`} title={a.label} aria-label={a.label}
             aria-pressed={view === a.v} onClick={() => setView((v) => (v === a.v ? null : a.v))}>
@@ -450,6 +501,7 @@ export function Workbench() {
       </footer>
 
       {browse && <FolderDialog onPick={pickFolder} onClose={() => setBrowse(false)} />}
+      {palette && <CommandPalette commands={commands} onClose={() => setPalette(false)} />}
       {switcher && (
         <RecentPicker recent={ws.recent} current={root} onPick={pickFolder} onClose={() => setSwitcher(false)}
           onBrowse={() => { setSwitcher(false); setBrowse(true); }} />

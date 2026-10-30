@@ -21,6 +21,10 @@
 - **Git in a folder of several repositories**: the Changes panel lists every repository
   with its branch and change count; pick one to commit, switch branches, pull or push.
   Diffs, gutter markers and staging work for files in any of them.
+- **Title bar** like VS Code: File, Edit, View, Go, Terminal and Help menus; a command
+  center that opens Go to file; local/remote status; toggles for the side bar, terminal
+  panel and Ask panel; Settings. **Command palette** (Ctrl+Shift+P) runs any menu
+  command by name.
 - **New look and icon**: the KuliDev design system (dark industrial). Charcoal surfaces,
   industrial orange for actions, focus and what is active, yellow kept for evidence and
   waiting agents, red for errors; dark is the default (light and match-system in

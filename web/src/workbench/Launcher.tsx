@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./Icons";
+import { TitleBar, type Command } from "./TitleBar";
+import { isDark, setThemePref } from "../theme";
 import { FolderDialog, OpeningCard, ProgressBar, RecentList, isOpening, progressText, useWorkspace } from "./workspace";
 
 // The workbench with no folder open, like an empty editor window: open a folder or a
@@ -29,11 +31,16 @@ export function Launcher({ onOpened }: { onOpened: () => void }) {
     ws.open(path);
   };
   const failed = job?.phase === "error" ? job.error : "";
+  const commands: Command[] = [
+    { id: "open-folder", menu: "File", label: "Open Folder…", keys: "Ctrl+O", run: () => setBrowse(true) },
+    ...ws.recent.slice(0, 6).map((r, i) => ({ id: `recent-${r.path}`, menu: "File" as const, label: r.name, run: () => pick(r.path), sep: i === 0 })),
+    { id: "t-theme", menu: "View", label: isDark() ? "Switch to Light Theme" : "Switch to Dark Theme", run: () => setThemePref(isDark() ? "light" : "dark") },
+  ];
   const idle = [Icon.search, Icon.git, Icon.docs, Icon.issues];
   return (
     <div className="wb">
+      <TitleBar commands={commands} center="Open a folder" onCenter={() => setBrowse(true)} />
       <nav className="activity" aria-label="Views">
-        <span className="act-mark" aria-hidden="true"><img src="/mark.png" alt="" /></span>
         <button className="act on" title="Explorer" aria-label="Explorer" aria-pressed="true"><Icon.files /></button>
         {idle.map((I, i) => (
           <button key={i} className="act" disabled title="Open a folder first" aria-label="Open a folder first"><I /></button>

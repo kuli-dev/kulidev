@@ -49,6 +49,18 @@ export function CodeTab({ path, from, to, onOpen, onCursor, onDirty }: {
   }
   const [error, setError] = useState("");
   const [note, setNote] = useState("");
+  // Menu commands (File > Save, Edit > Undo, Find, …) for the open editor.
+  useEffect(() => {
+    const on = (e: Event) => {
+      const id = (e as CustomEvent<string>).detail;
+      const ed = editor.current;
+      if (!ed) return;
+      if (id === "save") saveRef.current(false);
+      else { ed.focus(); ed.trigger("menu", id, null); }
+    };
+    addEventListener("kuli-editor-action", on);
+    return () => removeEventListener("kuli-editor-action", on);
+  }, []);
   const [save, setSave] = useState<SaveState>({ kind: "idle" });
   const saveRef = useRef<(force: boolean) => void>(() => {});
 
