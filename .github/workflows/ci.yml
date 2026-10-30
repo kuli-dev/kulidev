@@ -62,10 +62,14 @@ jobs:
       - name: Desktop app (Windows test build)
         if: runner.os == 'Windows'
         shell: bash
-        run: go build -trimpath -ldflags "-s -w -H=windowsgui" -o KuliDev.exe ./cmd/kulidev-desktop
+        run: |
+          go build -trimpath -ldflags "-s -w -H=windowsgui" -o KuliDev.exe ./cmd/kulidev-desktop
+          go build -trimpath -ldflags "-s -w" -o kuli.exe ./cmd/kuli
       - uses: actions/upload-artifact@v4
         if: runner.os == 'Windows'
         with:
           name: kulidev-desktop-windows
-          path: KuliDev.exe
+          path: |
+            KuliDev.exe
+            kuli.exe
           retention-days: 7

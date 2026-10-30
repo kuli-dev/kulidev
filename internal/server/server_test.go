@@ -307,7 +307,7 @@ func TestDNSRebindingRefused(t *testing.T) {
 
 func TestTerminals(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("no PTY support on Windows")
+		t.Skip("drives /bin/sh; ConPTY is covered in internal/term")
 	}
 	t.Setenv("SHELL", "/bin/sh")
 	ts, _ := setupWith(t, Options{Loopback: true, Terminals: true})

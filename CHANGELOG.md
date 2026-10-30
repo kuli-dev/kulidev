@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Terminal, agents and Pulse on Windows** through ConPTY (Windows 10 1809+). The
+  terminal opens PowerShell (pwsh when installed); npm-installed agents such as Claude
+  Code and Codex start through their .cmd launchers. `KuliDev.exe mcp` serves the
+  knowledge graph to agents started from the desktop app.
+
 ## 0.3.0 (2026-10-30)
 
 The desktop app, multi-repository folders, Settings, and a new look.

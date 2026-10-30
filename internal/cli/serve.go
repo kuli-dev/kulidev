@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -131,10 +130,6 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 			// A terminal is a shell for whoever is allowed in: on a network address it
 			// needs an explicit opt-in even though devices are paired.
 			terminals := !noTerminal && !readOnly && (!remote || remoteShell)
-			if terminals && runtime.GOOS == "windows" {
-				terminals = false // no PTY support yet; WSL has the full workbench
-				fmt.Fprintln(os.Stderr, "kuli: the terminal and agents are not supported on Windows yet; use kuli inside WSL for them")
-			}
 			opts := server.Options{ReadOnly: readOnly, Loopback: loopback, Terminals: terminals, Auth: devices, TLS: useTLS}
 			if pub != nil {
 				opts.AllowHosts = []string{pub.Hostname()}

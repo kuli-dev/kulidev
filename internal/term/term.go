@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"regexp"
 	"sort"
 	"strconv"
@@ -14,8 +13,6 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
-
-	"github.com/creack/pty"
 )
 
 // scrollback is how much recent output a session keeps for reconnecting viewers.
@@ -31,8 +28,7 @@ type Session struct {
 	Kind    string // "shell" or "agent"
 	Started time.Time
 
-	cmd  *exec.Cmd
-	ptmx *os.File
+	p *proc
 
 	mu     sync.Mutex
 	buf    []byte // ring of the last `scrollback` bytes
@@ -168,7 +164,7 @@ func (s *Session) Subscribe() ([]byte, <-chan []byte, func()) {
 
 // Write sends keystrokes to the shell.
 func (s *Session) Write(p []byte) error {
-	_, err := s.ptmx.Write(p)
+	_, err := s.p.Write(p)
 	return err
 }
 
@@ -177,13 +173,13 @@ func (s *Session) Resize(cols, rows int) error {
 	if cols < 2 || rows < 2 || cols > 1000 || rows > 1000 {
 		return errors.New("bad terminal size")
 	}
-	return pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
+	return s.p.Resize(cols, rows)
 }
 
 func (s *Session) pump() {
 	b := make([]byte, 32<<10)
 	for {
-		n, err := s.ptmx.Read(b)
+		n, err := s.p.Read(b)
 		if n > 0 {
 			chunk := append([]byte(nil), b[:n]...)
 			s.mu.Lock()
@@ -206,14 +202,10 @@ func (s *Session) pump() {
 			break
 		}
 	}
-	err := s.cmd.Wait()
+	code := s.p.Wait()
 	s.mu.Lock()
 	s.exited = true
-	if s.cmd.ProcessState != nil {
-		s.code = s.cmd.ProcessState.ExitCode()
-	} else if err != nil {
-		s.code = -1
-	}
+	s.code = code
 	msg := fmt.Sprintf("\r\n\x1b[2m[process exited with code %d]\x1b[0m\r\n", s.code)
 	s.buf = append(s.buf, msg...)
 	for ch := range s.subs {
@@ -225,7 +217,7 @@ func (s *Session) pump() {
 		delete(s.subs, ch)
 	}
 	s.mu.Unlock()
-	s.ptmx.Close()
+	s.p.Close()
 }
 
 // Manager owns a workspace's sessions.
@@ -238,13 +230,10 @@ type Manager struct {
 	sess map[string]*Session
 }
 
-// NewManager starts shells in dir. The shell is $SHELL (login, interactive) or /bin/sh.
+// NewManager starts shells in dir: the login shell ($SHELL, else /bin/sh), or PowerShell
+// on Windows.
 func NewManager(dir string) *Manager {
-	sh := os.Getenv("SHELL")
-	if sh == "" {
-		sh = "/bin/sh"
-	}
-	return &Manager{dir: dir, shell: []string{sh, "-l"}, sess: map[string]*Session{}}
+	return &Manager{dir: dir, shell: defaultShell(), sess: map[string]*Session{}}
 }
 
 // ErrTooMany is returned when MaxSessions are already running.
@@ -272,10 +261,7 @@ func (m *Manager) StartCommand(title, kind string, argv []string, cols, rows int
 	if cols < 2 || rows < 2 || cols > 1000 || rows > 1000 {
 		cols, rows = 100, 30
 	}
-	cmd := exec.Command(argv[0], argv[1:]...)
-	cmd.Dir = m.dir
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor", "KULIDEV=1")
-	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(cols), Rows: uint16(rows)})
+	p, err := startPTY(argv, m.dir, append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor", "KULIDEV=1"), cols, rows)
 	if err != nil {
 		return nil, err
 	}
@@ -285,7 +271,7 @@ func (m *Manager) StartCommand(title, kind string, argv []string, cols, rows int
 	}
 	s := &Session{
 		ID: fmt.Sprintf("t%d", m.next), Title: title, Kind: kind, Started: time.Now(), lastIO: time.Now(),
-		cmd: cmd, ptmx: ptmx, subs: map[chan []byte]struct{}{},
+		p: p, subs: map[chan []byte]struct{}{},
 	}
 	m.sess[s.ID] = s
 	go s.pump()
@@ -320,9 +306,7 @@ func (m *Manager) Kill(id string) bool {
 	if s == nil {
 		return false
 	}
-	if s.cmd.Process != nil {
-		s.cmd.Process.Kill()
-	}
+	s.p.Kill()
 	return true
 }
 

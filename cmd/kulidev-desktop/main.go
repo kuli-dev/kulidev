@@ -27,6 +27,15 @@ import (
 )
 
 func main() {
+	// "KuliDev mcp …" (how coding agents started from the app reach the knowledge graph)
+	// and the other commands work as in the kuli CLI.
+	if len(os.Args) > 1 && isCommand(os.Args[1]) {
+		if err := cli.NewRoot().Execute(); err != nil {
+			fmt.Fprintln(os.Stderr, "kuli:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	state := cli.UserStateDir()
 	os.MkdirAll(state, 0o700)
 	// A GUI app has no console: keep a log next to the recent-folders file.
@@ -43,7 +52,7 @@ func main() {
 	hub := server.NewHost(server.HostOptions{
 		UI: web.FS(), LLM: model, CanOpen: true, RecentFile: filepath.Join(state, "recent.json"),
 		SettingsFile: filepath.Join(state, "settings.json"), Version: cli.Version,
-		Options: server.Options{Loopback: true, Terminals: runtime.GOOS != "windows"}, // no PTY on Windows yet
+		Options: server.Options{Loopback: true, Terminals: true},
 	})
 	defer hub.Close()
 	if len(os.Args) > 1 {
@@ -87,4 +96,17 @@ func openBrowser(url string) {
 	case "darwin":
 		proc.Command("open", url).Start()
 	}
+}
+
+// isCommand reports whether arg names a kuli CLI command rather than a folder to open.
+func isCommand(arg string) bool {
+	if _, err := os.Stat(arg); err == nil {
+		return false // an existing folder (drag and drop) wins
+	}
+	for _, c := range cli.NewRoot().Commands() {
+		if c.Name() == arg {
+			return true
+		}
+	}
+	return arg == "help" || arg == "--help" || arg == "-h" || arg == "--version"
 }
