@@ -109,6 +109,21 @@ and symlinks are never written through. Terminals are off with `--read-only` or
 `--no-terminal`, and on a non-loopback address unless you pass `--allow-remote-terminal`. The UI (React +
 TypeScript + Monaco, `web/`) is embedded in the binary — no Node needed to run it.
 
+## From your phone or another computer
+
+```sh
+kuli serve --addr 0.0.0.0:7878 --tls-self-signed     # or --tls-cert/--tls-key
+kuli serve --addr 0.0.0.0:7878 --insecure-http       # only on an encrypted network (Tailscale, WireGuard)
+```
+
+On a network address every device must be **paired**: `kuli serve` prints a one-time code,
+the URLs that carry it (Tailscale first) and a QR code — scan it with your phone. Codes expire
+after 10 minutes and work once; wrong guesses are rate-limited. Each device gets its own
+revocable session (an HttpOnly, SameSite=Strict cookie; only a hash is stored, in
+`.kulidev/devices.json`, mode 0600). Paired devices can invite more, and revoke any device,
+from the **Devices** view. KuliDev refuses to listen on a network address without TLS unless
+you say `--insecure-http`, and terminals stay off there unless you add `--allow-remote-terminal`.
+
 ## Use it from your coding agent (MCP)
 
 ```sh

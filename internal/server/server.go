@@ -25,6 +25,7 @@ import (
 
 	"github.com/kuli-dev/kulidev/internal/agents"
 	"github.com/kuli-dev/kulidev/internal/ask"
+	"github.com/kuli-dev/kulidev/internal/auth"
 	"github.com/kuli-dev/kulidev/internal/docs"
 	"github.com/kuli-dev/kulidev/internal/scan"
 	"github.com/kuli-dev/kulidev/internal/store"
@@ -52,6 +53,8 @@ type Server struct {
 	readOnly  bool
 	loopback  bool          // bound to localhost: only localhost Host headers are accepted
 	terms     *term.Manager // nil when terminals are disabled
+	auth      *auth.Store   // nil when no pairing is required (local use)
+	secure    bool          // served over TLS: cookies get the Secure flag
 	rescanMu  sync.Mutex
 	rescanDue *time.Timer
 }
@@ -61,11 +64,15 @@ type Options struct {
 	ReadOnly  bool // refuse file writes (and terminals)
 	Loopback  bool // listening on a loopback address (enables Host-header checks)
 	Terminals bool // allow shell sessions
+	// Auth, when set, requires every API call to come from a paired device.
+	Auth *auth.Store
+	TLS  bool
 }
 
 // New loads the snapshot and component graph.
 func New(root, dataDir string, st *store.Store, llm docs.Chatter, ui fs.FS, opts Options) (*Server, error) {
 	s := &Server{root: root, dataDir: dataDir, store: st, llm: llm, ui: ui, readOnly: opts.ReadOnly, loopback: opts.Loopback}
+	s.auth, s.secure = opts.Auth, opts.TLS
 	if opts.Terminals && !opts.ReadOnly {
 		s.terms = term.NewManager(root)
 	}
@@ -105,6 +112,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/terminals", s.termStart)
 	mux.HandleFunc("DELETE /api/terminals/{id}", s.termKill)
 	mux.HandleFunc("GET /api/terminals/{id}/ws", s.termSocket)
+	mux.HandleFunc("GET /api/auth/state", s.authState)
+	mux.HandleFunc("POST /api/pair", s.pair)
+	mux.HandleFunc("POST /api/logout", s.logout)
+	mux.HandleFunc("GET /api/devices", s.deviceList)
+	mux.HandleFunc("POST /api/devices/code", s.deviceCode)
+	mux.HandleFunc("DELETE /api/devices/{id}", s.deviceRevoke)
 	mux.HandleFunc("GET /api/agents", s.agentList)
 	mux.HandleFunc("POST /api/agents", s.agentStart)
 	mux.HandleFunc("/api/", func(w http.ResponseWriter, r *http.Request) { fail(w, http.StatusNotFound, "no such endpoint") })
@@ -154,8 +167,34 @@ func (s *Server) guard(next http.Handler) http.Handler {
 				return
 			}
 		}
+		if s.auth != nil && strings.HasPrefix(r.URL.Path, "/api/") && !publicAPI[r.URL.Path] {
+			c, err := r.Cookie(sessionCookie)
+			if err != nil {
+				authRequired(w)
+				return
+			}
+			d, ok := s.auth.Check(c.Value)
+			if !ok {
+				authRequired(w)
+				return
+			}
+			r = r.WithContext(context.WithValue(r.Context(), deviceKey{}, d))
+		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+const sessionCookie = "kuli_session"
+
+// publicAPI lists endpoints an unpaired device may call.
+var publicAPI = map[string]bool{"/api/auth/state": true, "/api/pair": true}
+
+type deviceKey struct{}
+
+func authRequired(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	json.NewEncoder(w).Encode(map[string]any{"error": "pair this device first", "auth": true})
 }
 
 func loopbackHost(hostport string) bool {
@@ -628,6 +667,98 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 		return err
 	}
 	return os.Rename(tmp.Name(), path)
+}
+
+// ---- pairing & devices ------------------------------------------------------------
+
+func (s *Server) currentDevice(r *http.Request) (auth.Device, bool) {
+	if s.auth == nil {
+		return auth.Device{}, false
+	}
+	if d, ok := r.Context().Value(deviceKey{}).(auth.Device); ok {
+		return d, true
+	}
+	if c, err := r.Cookie(sessionCookie); err == nil {
+		return s.auth.Check(c.Value)
+	}
+	return auth.Device{}, false
+}
+
+func (s *Server) authState(w http.ResponseWriter, r *http.Request) {
+	d, paired := s.currentDevice(r)
+	resp := map[string]any{"required": s.auth != nil, "paired": paired}
+	if paired {
+		resp["device"] = d.Public()
+	}
+	writeJSON(w, resp)
+}
+
+func (s *Server) setSession(w http.ResponseWriter, value string, maxAge int) {
+	http.SetCookie(w, &http.Cookie{
+		Name: sessionCookie, Value: value, Path: "/", MaxAge: maxAge,
+		HttpOnly: true, Secure: s.secure, SameSite: http.SameSiteStrictMode,
+	})
+}
+
+func (s *Server) pair(w http.ResponseWriter, r *http.Request) {
+	if s.auth == nil {
+		fail(w, http.StatusBadRequest, "this workspace does not use pairing")
+		return
+	}
+	var req struct{ Code, Name string }
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 2<<10)).Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, "code required")
+		return
+	}
+	token, d, err := s.auth.Pair(req.Code, req.Name)
+	switch {
+	case errors.Is(err, auth.ErrRateLimited):
+		fail(w, http.StatusTooManyRequests, err.Error())
+		return
+	case errors.Is(err, auth.ErrBadCode):
+		fail(w, http.StatusForbidden, err.Error())
+		return
+	case err != nil:
+		fail(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.setSession(w, token, 365*24*3600)
+	log.Printf("paired device %q (%s)", d.Name, d.ID)
+	writeJSON(w, map[string]any{"device": d.Public()})
+}
+
+func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+	if d, ok := s.currentDevice(r); ok {
+		s.auth.Revoke(d.ID)
+	}
+	s.setSession(w, "", -1)
+	writeJSON(w, map[string]bool{"ok": true})
+}
+
+func (s *Server) deviceList(w http.ResponseWriter, r *http.Request) {
+	if s.auth == nil {
+		writeJSON(w, map[string]any{"required": false, "devices": []any{}})
+		return
+	}
+	me, _ := s.currentDevice(r)
+	writeJSON(w, map[string]any{"required": true, "current": me.ID, "devices": s.auth.List()})
+}
+
+// deviceCode lets a paired device invite another (e.g. the laptop shows a QR for the phone).
+func (s *Server) deviceCode(w http.ResponseWriter, r *http.Request) {
+	if s.auth == nil {
+		fail(w, http.StatusBadRequest, "this workspace does not use pairing")
+		return
+	}
+	writeJSON(w, map[string]any{"code": s.auth.NewCode(), "expiresIn": int(auth.CodeTTL.Seconds())})
+}
+
+func (s *Server) deviceRevoke(w http.ResponseWriter, r *http.Request) {
+	if s.auth == nil || !s.auth.Revoke(r.PathValue("id")) {
+		fail(w, http.StatusNotFound, "no such device")
+		return
+	}
+	writeJSON(w, map[string]bool{"ok": true})
 }
 
 // Close stops background work (terminal sessions).

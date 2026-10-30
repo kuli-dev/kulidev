@@ -4,13 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/kuli-dev/kulidev/internal/auth"
 	"github.com/kuli-dev/kulidev/internal/docs"
 	"github.com/kuli-dev/kulidev/internal/scan"
 	"github.com/kuli-dev/kulidev/internal/store"
@@ -365,5 +368,74 @@ func TestTerminals(t *testing.T) {
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusForbidden {
 		t.Errorf("read-only terminal = %d", resp.StatusCode)
+	}
+}
+
+func TestPairingRequired(t *testing.T) {
+	devices, _ := auth.Open(filepath.Join(t.TempDir(), "devices.json"))
+	ts, _ := setupWith(t, Options{Auth: devices})
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	do := func(method, path, body string) (int, map[string]any) {
+		req, _ := http.NewRequest(method, ts.URL+path, strings.NewReader(body))
+		req.Header.Set("X-Kuli-Request", "1")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		var out map[string]any
+		json.NewDecoder(resp.Body).Decode(&out)
+		return resp.StatusCode, out
+	}
+
+	// Unpaired: the code is invisible, only the auth endpoints answer.
+	if code, out := do("GET", "/api/file?path=go.mod", ""); code != 401 || out["auth"] != true {
+		t.Errorf("unpaired file read = %d %v", code, out)
+	}
+	if _, out := do("GET", "/api/auth/state", ""); out["required"] != true || out["paired"] != false {
+		t.Errorf("state = %v", out)
+	}
+	if code, _ := do("POST", "/api/pair", `{"code":"AAAA-AAAA","name":"x"}`); code != 403 {
+		t.Errorf("wrong code = %d", code)
+	}
+
+	pairCode := devices.NewCode()
+	code, out := do("POST", "/api/pair", `{"code":"`+pairCode+`","name":"Test phone"}`)
+	if code != 200 {
+		t.Fatalf("pair = %d %v", code, out)
+	}
+	u, _ := url.Parse(ts.URL)
+	var session *http.Cookie
+	for _, c := range jar.Cookies(u) {
+		if c.Name == "kuli_session" {
+			session = c
+		}
+	}
+	if session == nil {
+		t.Fatal("no session cookie")
+	}
+	if code, _ := do("GET", "/api/file?path=go.mod", ""); code != 200 {
+		t.Errorf("paired file read = %d", code)
+	}
+
+	// A paired device can invite another, and list/revoke devices.
+	if code, out := do("POST", "/api/devices/code", ""); code != 200 || len(out["code"].(string)) != 9 {
+		t.Errorf("new code = %d %v", code, out)
+	}
+	_, list := do("GET", "/api/devices", "")
+	devs := list["devices"].([]any)
+	if len(devs) != 1 || list["current"] != devs[0].(map[string]any)["id"] || devs[0].(map[string]any)["tokenHash"] != nil && devs[0].(map[string]any)["tokenHash"] != "" {
+		t.Errorf("devices = %v", list)
+	}
+
+	// Logging out revokes this device: the old cookie no longer works.
+	do("POST", "/api/logout", "")
+	req, _ := http.NewRequest("GET", ts.URL+"/api/overview", nil)
+	req.AddCookie(session)
+	resp, _ := http.DefaultClient.Do(req)
+	resp.Body.Close()
+	if resp.StatusCode != 401 {
+		t.Errorf("revoked session = %d", resp.StatusCode)
 	}
 }

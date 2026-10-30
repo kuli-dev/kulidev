@@ -41,6 +41,13 @@ the workspace, IDE and remote features are layered on top.
 - [x] Agent sessions in the workbench terminal: Claude Code (--mcp-config) and Codex (-c mcp_servers…) start with kuli MCP attached; OpenCode/Aider detected
 - [x] Lazy-load Monaco, the map and the terminal (first download 1,026 KB → 103 KB gzipped)
 
+## v0.6 — Remote & mobile
+- [x] Device pairing: one-time codes (10 min, single use, rate-limited) + terminal QR; per-device revocable sessions
+- [x] TLS required off-loopback (self-signed generator, own cert, or explicit --insecure-http for Tailscale/WireGuard)
+- [x] Devices view: list, revoke, sign out, invite another device with a QR code
+- [ ] Verify and tune the phone layout on real devices (responsive rules exist, untested on a phone)
+- [ ] Phone-first views: agent status, approvals, diffs
+
 ## Later
 - Desktop shell (Tauri), mobile PWA, remote workspaces + device pairing, Postgres for teams,
   more languages via parser plugins.

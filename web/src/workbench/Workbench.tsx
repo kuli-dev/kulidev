@@ -10,6 +10,7 @@ import type { Cursor } from "./CodeTab";
 import { DocTab } from "./DocTab";
 import { clearFileCache, tabTitle, type NewTab, type Tab } from "./files";
 import { Icon } from "./Icons";
+import { DevicesPane } from "./Pair";
 import { QuickOpen } from "./QuickOpen";
 
 import { AgentsPane, DocsPane, Explorer, IssuesPane, SearchPane } from "./SidePanes";
@@ -20,7 +21,7 @@ const CodeTab = lazy(() => import("./CodeTab").then((m) => ({ default: m.CodeTab
 const MapView = lazy(() => import("../views/Map").then((m) => ({ default: m.MapView })));
 const TerminalPanel = lazy(() => import("./Terminal").then((m) => ({ default: m.TerminalPanel })));
 
-type View = "explorer" | "search" | "docs" | "issues" | "agents";
+type View = "explorer" | "search" | "docs" | "issues" | "agents" | "devices";
 
 const WELCOME: Tab = { id: "welcome", kind: "welcome" };
 
@@ -176,6 +177,7 @@ export function Workbench() {
     { v: "docs", label: "Docs", icon: Icon.docs },
     { v: "issues", label: "Issues", icon: Icon.issues },
     ...(ov.data?.terminals ? [{ v: "agents" as View, label: "Agents", icon: Icon.agent }] : []),
+    { v: "devices", label: "Devices", icon: Icon.devices },
   ];
 
   return (
@@ -202,6 +204,7 @@ export function Workbench() {
           {view === "docs" && <DocsPane onOpenDoc={(name) => openTab({ kind: "doc", name })} />}
           {view === "issues" && <IssuesPane onOpen={openFile} />}
           {view === "agents" && <AgentsPane onStart={startAgent} />}
+          {view === "devices" && <DevicesPane />}
         </aside>
       )}
 

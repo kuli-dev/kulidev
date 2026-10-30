@@ -37,6 +37,8 @@ export type TermInfo = { id: string; title: string; started: string; exited: boo
 
 export type AgentInfo = { id: string; name: string; installed: boolean; mcp: boolean; hint?: string };
 
+export type Device = { id: string; name: string; created: string; lastSeen: string };
+
 export type AskResult = { answer: string; keywords: string[]; citations: number; removed: number; coverage: number; hits: number };
 
 export class ApiError extends Error {
@@ -50,6 +52,8 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = { ...(init?.headers ?? {}), "X-Kuli-Request": "1" };
   const res = await fetch(path, { ...init, headers });
   const body = await res.json().catch(() => ({}));
+  // Remote workspaces: an unpaired (or revoked) device is sent to the pairing screen.
+  if (res.status === 401 && body.auth) dispatchEvent(new Event("kuli-auth-required"));
   if (!res.ok) throw new ApiError(body.error || `${res.status} ${res.statusText}`, res.status, body);
   return body as T;
 }
@@ -81,5 +85,12 @@ export const api = {
   agents: () => call<{ enabled: boolean; agents: AgentInfo[] }>("api/agents"),
   startAgent: (id: string, cols: number, rows: number) =>
     call<TermInfo>("api/agents", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, cols, rows }) }),
+  authState: () => call<{ required: boolean; paired: boolean; device?: Device }>("api/auth/state"),
+  pair: (code: string, name: string) =>
+    call<{ device: Device }>("api/pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, name }) }),
+  logout: () => call<{ ok: boolean }>("api/logout", { method: "POST" }),
+  devices: () => call<{ required: boolean; current: string; devices: Device[] }>("api/devices"),
+  newPairingCode: () => call<{ code: string; expiresIn: number }>("api/devices/code", { method: "POST" }),
+  revokeDevice: (id: string) => call<{ ok: boolean }>(`api/devices/${q(id)}`, { method: "DELETE" }),
   rescan: () => call<{ files: number; ms: number }>("api/rescan", { method: "POST" }),
 };
