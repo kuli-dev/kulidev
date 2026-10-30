@@ -370,7 +370,7 @@ export function Workbench() {
         <aside className="side" aria-label="Side bar">
           {view === "explorer" && <Explorer files={files} repo={repo} active={activePath} onOpen={openFile} />}
           {view === "search" && <SearchPane initial={searchQ} onOpen={openFile} />}
-          {view === "docs" && <DocsPane onOpenDoc={(name) => { openTab({ kind: "doc", name }); if (narrow) setView(null); }} />}
+          {view === "docs" && <DocsPane model={ov.data?.llm ? ov.data.model ?? "" : ""} onOpenDoc={(name) => { openTab({ kind: "doc", name }); if (narrow) setView(null); }} />}
           {view === "issues" && <IssuesPane onOpen={openFile} />}
           {view === "changes" && (
             <ChangesPane status={git?.status ?? null} writable={git?.writable ?? false} onChanged={refreshGit}

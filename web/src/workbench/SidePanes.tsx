@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type FileView, type Hit, type TreeFile } from "../api";
+import { api, type DocsJob, type FileView, type Hit, type TreeFile } from "../api";
 import { useLoad } from "../hooks";
 
 import { Icon } from "./Icons";
@@ -167,13 +167,81 @@ export function SearchPane({ initial, onOpen }: { initial: string; onOpen: (p: s
   );
 }
 
-export function DocsPane({ onOpenDoc }: { onOpenDoc: (name: string) => void }) {
+const DOC_NAMES: Record<string, string> = {
+  overview: "overview", architecture: "architecture", dependencies: "dependencies",
+  infrastructure: "infrastructure", "getting-started": "getting started",
+};
+
+// Docs: what KuliDev wrote about this folder, and the button that writes or refreshes
+// them (same engine as `kuli docs`), with progress and Stop.
+export function DocsPane({ onOpenDoc, model }: { onOpenDoc: (name: string) => void; model: string }) {
   const d = useLoad(api.docs, []);
   const docs = d.data?.docs ?? [];
+  const [job, setJob] = useState<DocsJob | null>(null);
+  const [factsOnly, setFactsOnly] = useState(false);
+  const [error, setError] = useState("");
+  const wasRunning = useRef(false);
+
+  useEffect(() => {
+    let t: number | undefined;
+    const poll = () => api.docsJob().then((j) => {
+      setJob(j);
+      if (wasRunning.current && !j.running) d.reload(); // finished: show the new docs
+      wasRunning.current = j.running;
+      if (j.running) t = window.setTimeout(poll, 1000);
+    }, () => {});
+    poll();
+    return () => window.clearTimeout(t);
+  }, [job?.running]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function generate(only?: string[]) {
+    setError("");
+    try {
+      wasRunning.current = true; // even a run that ends before the first poll reloads the list
+      setJob(await api.generateDocs({ only, factsOnly: factsOnly || !model }));
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  }
+  const stale = docs.filter((x) => x.status === "STALE").map((x) => x.id);
+  const running = !!job?.running;
+  const pct = job && job.total ? Math.round((job.done / job.total) * 100) : 0;
+
   return (
     <div className="pane">
       <h2 className="pane-title">Docs</h2>
-      {d.data && docs.length === 0 && <p className="muted small pad-x">No docs yet. Run <code>kuli docs</code> in the repository.</p>}
+      {d.data && docs.length === 0 && !running && (
+        <p className="muted small pad-x">
+          KuliDev can write documents about this folder (overview, architecture, dependencies, infrastructure, getting started)
+          from what it read, citing the code for every claim.
+        </p>
+      )}
+      <div className="docs-gen pad-x">
+        {running ? (
+          <>
+            <p className="small">Writing {DOC_NAMES[job!.current ?? ""] ?? job!.current ?? "…"} ({Math.min(job!.done + 1, job!.total)} of {job!.total})</p>
+            <div className="progress" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}><span style={{ width: `${pct}%` }} /></div>
+            <p className="muted small docs-line">{job!.lines[job!.lines.length - 1]}</p>
+            <button className="btn small-btn" onClick={() => api.cancelDocs().catch(() => {})}>Stop</button>
+          </>
+        ) : (
+          <>
+            <div className="docs-actions">
+              <button className="btn primary small-btn" onClick={() => generate()}>{docs.length ? "Regenerate all" : "Generate docs"}</button>
+              {stale.length > 0 && <button className="btn small-btn" onClick={() => generate(stale)}>Refresh {stale.length} stale</button>}
+            </div>
+            <p className="muted small">
+              {model && !factsOnly ? <>Written by {model}; code excerpts from this folder are sent to it.</> : "Facts only: no model is used."}
+              {!model && <> Set a model in Settings for written explanations.</>}
+            </p>
+            {model && (
+              <label className="small check"><input type="checkbox" checked={factsOnly} onChange={(e) => setFactsOnly(e.target.checked)} /> Facts only (don't use the model)</label>
+            )}
+            {job?.error && <p className="notice warn small">{job.error === "stopped" ? "Stopped." : job.error}</p>}
+            {error && <p className="notice warn small">{error}</p>}
+          </>
+        )}
+      </div>
       <ul className="plain">
         {docs.map((x) => (
           <li key={x.file}>

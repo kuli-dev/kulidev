@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -261,7 +262,8 @@ func (m *Manager) StartCommand(title, kind string, argv []string, cols, rows int
 	if cols < 2 || rows < 2 || cols > 1000 || rows > 1000 {
 		cols, rows = 100, 30
 	}
-	p, err := startPTY(argv, m.dir, append(os.Environ(), "TERM=xterm-256color", "COLORTERM=truecolor", "KULIDEV=1"), cols, rows)
+	env := append(withKuliOnPath(os.Environ()), "TERM=xterm-256color", "COLORTERM=truecolor", "KULIDEV=1")
+	p, err := startPTY(argv, m.dir, env, cols, rows)
 	if err != nil {
 		return nil, err
 	}
@@ -321,4 +323,28 @@ func (m *Manager) Close() {
 	for _, id := range ids {
 		m.Kill(id)
 	}
+}
+
+// withKuliOnPath puts the folder of the running program first on PATH, so `kuli` works
+// in KuliDev's terminals when kuli sits beside it (the release archive, a download).
+func withKuliOnPath(env []string) []string {
+	exe, err := os.Executable()
+	if err != nil {
+		return env
+	}
+	dir := filepath.Dir(exe)
+	out := make([]string, 0, len(env)+1)
+	found := false
+	for _, kv := range env {
+		k, v, _ := strings.Cut(kv, "=")
+		if strings.EqualFold(k, "PATH") && !found { // Windows spells it "Path"
+			found = true
+			kv = k + "=" + dir + string(os.PathListSeparator) + v
+		}
+		out = append(out, kv)
+	}
+	if !found {
+		out = append(out, "PATH="+dir)
+	}
+	return out
 }

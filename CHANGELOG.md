@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **Generate docs from the Docs panel**: Generate / Regenerate all / Refresh stale, with
+  progress, Stop, and a facts-only option; uses the model from Settings. No command line
+  needed.
+- **`kuli` works in KuliDev's terminals**: the app's folder is put first on PATH, so the
+  `kuli.exe` that ships beside `KuliDev.exe` is found.
+
 - **Subgraphs in the diagram editor**: groups are boxes around their members. Drag a
   node into or out of a box to change where it belongs, drag a box to move it with its
   contents, add one from the palette or wrap the selection (Group selection); title,

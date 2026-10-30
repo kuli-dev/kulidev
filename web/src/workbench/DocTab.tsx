@@ -11,7 +11,7 @@ export function DocTab({ name }: { name: string }) {
       {meta?.status === "STALE" && (
         <p className="notice warn">
           Code this page cites has changed since it was written ({meta.changed?.slice(0, 3).join(", ")}
-          {(meta.changed?.length ?? 0) > 3 ? ", …" : ""}). Regenerate with <code>kuli docs --only {meta.id}</code>.
+          {(meta.changed?.length ?? 0) > 3 ? ", …" : ""}). Refresh it from the Docs panel (Refresh stale).
         </p>
       )}
       {meta && meta.mode !== "deterministic" && meta.mode !== "facts-only" && (

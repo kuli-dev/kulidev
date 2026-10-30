@@ -47,11 +47,13 @@ type Server struct {
 	llm     docs.Chatter // nil when no model is configured
 	ui      fs.FS        // built web app; nil serves an API-only notice
 
-	mu    sync.RWMutex
-	comps []*docs.Component
-	snap  *store.Snapshot
-	repos []repoRef // git repositories in the folder
-	scanM sync.Mutex
+	mu      sync.RWMutex
+	comps   []*docs.Component
+	snap    *store.Snapshot
+	repos   []repoRef // git repositories in the folder
+	docs    docsJob   // "Generate docs" from the Docs pane
+	version string
+	scanM   sync.Mutex
 
 	readOnly  bool
 	loopback  bool            // bound to localhost: only localhost Host headers are accepted
@@ -77,11 +79,12 @@ type Options struct {
 	TLS  bool // cookies get the Secure flag (TLS here or at a proxy in front)
 	// AllowHosts are public names a tunnel (ngrok, Cloudflare Tunnel) forwards as Host.
 	AllowHosts []string
+	Version    string // stamped into generated docs
 }
 
 // New loads the snapshot and component graph.
 func New(root, dataDir string, st *store.Store, llm docs.Chatter, ui fs.FS, opts Options) (*Server, error) {
-	s := &Server{root: root, dataDir: dataDir, store: st, llm: llm, ui: ui, readOnly: opts.ReadOnly, loopback: opts.Loopback}
+	s := &Server{root: root, dataDir: dataDir, store: st, llm: llm, ui: ui, readOnly: opts.ReadOnly, loopback: opts.Loopback, version: opts.Version}
 	s.auth, s.secure = opts.Auth, opts.TLS
 	s.allowHost = map[string]bool{}
 	for _, h := range opts.AllowHosts {
@@ -124,6 +127,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/broken", s.broken)
 	mux.HandleFunc("GET /api/docs", s.docsList)
 	mux.HandleFunc("GET /api/docs/{file}", s.docsGet)
+	mux.HandleFunc("GET /api/docs-job", s.docsJobStatus)
+	mux.HandleFunc("POST /api/docs-job", s.docsGenerate)
+	mux.HandleFunc("POST /api/docs-job/cancel", s.docsCancel)
 	mux.HandleFunc("POST /api/ask", s.ask)
 	mux.HandleFunc("POST /api/rescan", s.rescan)
 	mux.HandleFunc("GET /api/terminals", s.termList)
@@ -556,7 +562,7 @@ func (s *Server) knowledgeDir() string { return filepath.Join(s.dataDir, "knowle
 func (s *Server) docsList(w http.ResponseWriter, r *http.Request) {
 	fr, err := docs.Status(s.knowledgeDir(), s.root)
 	if err != nil {
-		writeJSON(w, map[string]any{"docs": []any{}, "hint": "No docs yet — run `kuli docs`."})
+		writeJSON(w, map[string]any{"docs": []any{}})
 		return
 	}
 	type item struct {
@@ -1162,6 +1168,11 @@ func (s *Server) deviceRevoke(w http.ResponseWriter, r *http.Request) {
 // Close stops the workspace's terminals and waits for a running scan, so the store can
 // be closed after it.
 func (s *Server) Close() {
+	s.docs.mu.Lock()
+	if s.docs.cancel != nil {
+		s.docs.cancel() // a docs run stops with its folder
+	}
+	s.docs.mu.Unlock()
 	s.rescanMu.Lock()
 	if s.rescanDue != nil {
 		s.rescanDue.Stop()

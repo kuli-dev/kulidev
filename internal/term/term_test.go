@@ -4,6 +4,8 @@ package term
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -104,5 +106,16 @@ func TestTailLines(t *testing.T) {
 	}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("tail = %q, want %q", got, want)
+	}
+}
+
+func TestKuliOnPath(t *testing.T) {
+	exe, _ := os.Executable()
+	env := withKuliOnPath([]string{"HOME=/h", "PATH=/usr/bin"})
+	if env[1] != "PATH="+filepath.Dir(exe)+":/usr/bin" || env[0] != "HOME=/h" {
+		t.Errorf("env = %v", env)
+	}
+	if env := withKuliOnPath([]string{"HOME=/h"}); env[len(env)-1] != "PATH="+filepath.Dir(exe) {
+		t.Errorf("no PATH = %v", env)
 	}
 }

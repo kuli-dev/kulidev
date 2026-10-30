@@ -65,6 +65,10 @@ export type SettingsInfo = {
 };
 export type LLMInput = { baseURL: string; model: string; reasoningEffort: string; maxTokens: number; apiKey?: string; clearKey?: boolean };
 
+export type DocsJob = {
+  running: boolean; current?: string; done: number; total: number; model?: string; lines: string[]; error?: string; finished?: string;
+};
+
 export type RecentFolder = { path: string; name: string; opened: string; exists: boolean };
 export type OpenJob = {
   path: string; name: string; phase: "listing" | "reading" | "saving" | "done" | "error";
@@ -108,6 +112,10 @@ export const api = {
   broken: () => call<{ hits: Hit[] }>("api/broken"),
   docs: () => call<{ docs: DocItem[] | null; hint?: string }>("api/docs"),
   doc: (name: string) => call<{ markdown: string }>(`api/docs/${q(name)}`),
+  docsJob: () => call<DocsJob>("api/docs-job"),
+  generateDocs: (opts: { only?: string[]; factsOnly?: boolean }) =>
+    call<DocsJob>("api/docs-job", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(opts) }),
+  cancelDocs: () => call<{ ok: boolean }>("api/docs-job/cancel", { method: "POST" }),
   ask: (question: string) =>
     call<AskResult>("api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question }) }),
   save: (path: string, content: string, baseHash: string, force = false) =>

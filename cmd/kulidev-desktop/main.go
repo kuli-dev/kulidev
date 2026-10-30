@@ -52,7 +52,7 @@ func main() {
 	hub := server.NewHost(server.HostOptions{
 		UI: web.FS(), LLM: model, CanOpen: true, RecentFile: filepath.Join(state, "recent.json"),
 		SettingsFile: filepath.Join(state, "settings.json"), Version: cli.Version,
-		Options: server.Options{Loopback: true, Terminals: true},
+		Options: server.Options{Loopback: true, Terminals: true, Version: cli.Version},
 	})
 	defer hub.Close()
 	if len(os.Args) > 1 {

@@ -130,7 +130,7 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 			// A terminal is a shell for whoever is allowed in: on a network address it
 			// needs an explicit opt-in even though devices are paired.
 			terminals := !noTerminal && !readOnly && (!remote || remoteShell)
-			opts := server.Options{ReadOnly: readOnly, Loopback: loopback, Terminals: terminals, Auth: devices, TLS: useTLS}
+			opts := server.Options{ReadOnly: readOnly, Loopback: loopback, Terminals: terminals, Auth: devices, TLS: useTLS, Version: Version}
 			if pub != nil {
 				opts.AllowHosts = []string{pub.Hostname()}
 				opts.TLS = true // the tunnel terminates TLS: cookies must be Secure

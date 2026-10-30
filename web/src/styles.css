@@ -734,3 +734,10 @@ figure.mmd { margin: 1.2rem 0; padding: 12px; border: 1px solid var(--line); bor
 .fc-group.is-sel .fc-group-title { color: var(--ink); }
 .fc-group:hover .fc-handle, .fc-group.is-sel .fc-handle { opacity: 1; }
 .fc-groupchip .fc-bg { border-style: dashed; border-radius: 6px; background: none; }
+
+/* Docs pane: generate */
+.docs-gen { display: grid; gap: 6px; margin: 4px 0 12px; }
+.docs-gen p { margin: 0; }
+.docs-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.docs-line { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.check { display: flex; align-items: center; gap: 6px; }
