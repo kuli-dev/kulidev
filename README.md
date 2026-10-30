@@ -81,7 +81,7 @@ the lines that matter). Citations are validated exactly like DocsMana's. Without
 kuli serve            # http://127.0.0.1:7878
 ```
 
-A VS Code-style workbench over the knowledge graph (read-only for now):
+A VS Code-style workbench over the knowledge graph:
 
 - **Explorer** tree, **Ctrl+P** quick open, editor **tabs** with breadcrumbs, and the
   Monaco editor (VS Code's editor) with syntax highlighting.
@@ -90,11 +90,17 @@ A VS Code-style workbench over the knowledge graph (read-only for now):
 - **Outline** and **Imported by** for the active file, docked under the explorer.
 - **Ask Kuli** chat panel (**Ctrl+L**): answers cite lines; clicking a citation opens the
   file with those lines highlighted.
+- **Edit and save** with **Ctrl+S**. Saves never overwrite silently: if the file changed on
+  disk since you opened it (git pull, another editor, an agent), you get a conflict and
+  choose *Reload from disk* or *Overwrite with mine*. Writes are atomic, and the knowledge
+  graph refreshes in the background. `kuli serve --read-only` turns editing off.
 - **Map** (component graph), **Docs** (with stale warnings), **Issues** (broken imports) and
   a **Welcome** overview as tabs or side views. **Ctrl+Shift+F** search, **Ctrl+B** side bar.
 
-It binds to localhost by default because it shows your source code; the API refuses
-cross-origin writes, and only files recorded by the scan can be read. The UI (React +
+It binds to localhost by default because it shows (and edits) your source code. Requests
+must carry a localhost `Host` header (so DNS-rebinding sites can't reach it), writes must be
+same-origin with a custom header, only files recorded by the scan can be read or written,
+and symlinks are never written through. The UI (React +
 TypeScript + Monaco, `web/`) is embedded in the binary — no Node needed to run it.
 
 ## Use it from your coding agent (MCP)

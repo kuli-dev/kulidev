@@ -165,6 +165,15 @@ ul.plain { list-style: none; padding: 0; margin: 0; }
 .crumbs .last { color: var(--ink); }
 .editor-body { flex: 1; min-height: 0; position: relative; overflow: hidden; }
 .monaco-host { position: absolute; inset: 0; }
+.monaco-host.with-banner { top: 46px; }
+.editor-banner {
+  position: absolute; top: 0; left: 0; right: 0; height: 46px; z-index: 5; display: flex; align-items: center; gap: 10px;
+  padding: 0 14px; background: var(--surface); border-bottom: 1px solid var(--line); box-shadow: inset 4px 0 0 var(--rust); font-size: 13px;
+}
+.editor-banner span { flex: 1; }
+.tab-dirty { color: var(--safety); font-size: 12px; }
+.tab:has(.tab-dirty) .tab-x { opacity: 0.8; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .mono-cited { background: var(--safety-wash); }
 .mono-cited-bar { background: var(--safety); width: 4px !important; margin-left: 3px; }
 .welcome-tab, .doc-tab { height: 100%; overflow: auto; }

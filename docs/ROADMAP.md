@@ -36,7 +36,7 @@ the workspace, IDE and remote features are layered on top.
 - [x] Activity bar, explorer tree, tabs, breadcrumbs, status bar, Ctrl+P quick open
 - [x] Monaco editor (read-only) with knowledge hover + cross-file go-to-definition
 - [x] Outline / Imported by panels; Ask Kuli chat panel; Map, Docs, Welcome as tabs
-- [ ] Edit + save files (optimistic revision checks, per the sync spec)
+- [x] Edit + save files: content-hash conflict detection, atomic writes, background re-index, --read-only
 - [ ] Integrated terminal (xterm.js + server PTY), persistent across reconnects
 - [ ] Agent sessions (Claude Code, Codex, …) in the workbench, with kuli MCP attached
 - [ ] Lazy-load Monaco so the first paint doesn't wait for 1 MB of editor

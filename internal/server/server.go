@@ -3,12 +3,15 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"path"
@@ -41,11 +44,22 @@ type Server struct {
 	comps []*docs.Component
 	snap  *store.Snapshot
 	scanM sync.Mutex
+
+	readOnly  bool
+	loopback  bool // bound to localhost: only localhost Host headers are accepted
+	rescanMu  sync.Mutex
+	rescanDue *time.Timer
+}
+
+// Options tunes a server.
+type Options struct {
+	ReadOnly bool // refuse file writes
+	Loopback bool // listening on a loopback address (enables Host-header checks)
 }
 
 // New loads the snapshot and component graph.
-func New(root, dataDir string, st *store.Store, llm docs.Chatter, ui fs.FS) (*Server, error) {
-	s := &Server{root: root, dataDir: dataDir, store: st, llm: llm, ui: ui}
+func New(root, dataDir string, st *store.Store, llm docs.Chatter, ui fs.FS, opts Options) (*Server, error) {
+	s := &Server{root: root, dataDir: dataDir, store: st, llm: llm, ui: ui, readOnly: opts.ReadOnly, loopback: opts.Loopback}
 	return s, s.reload()
 }
 
@@ -71,6 +85,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/tree", s.tree)
 	mux.HandleFunc("GET /api/definition", s.definition)
 	mux.HandleFunc("GET /api/file", s.file)
+	mux.HandleFunc("PUT /api/file", s.saveFile)
 	mux.HandleFunc("GET /api/deps", s.deps)
 	mux.HandleFunc("GET /api/broken", s.broken)
 	mux.HandleFunc("GET /api/docs", s.docsList)
@@ -95,26 +110,46 @@ func (s *Server) Handler() http.Handler {
 			fmt.Fprintln(w, "KuliDev API is running; the web UI was not built into this binary (make web).")
 		})
 	}
-	return securityHeaders(mux)
+	return s.guard(mux)
 }
 
-// securityHeaders keeps the UI from being framed or loading foreign scripts, and rejects
-// cross-site API writes (a page on another origin must not trigger rescans or LLM calls).
-func securityHeaders(next http.Handler) http.Handler {
+// guard applies browser hardening and request checks to everything:
+//   - Host must be localhost when bound to loopback (defeats DNS rebinding, where a
+//     hostile site resolves its own name to 127.0.0.1 to read the code);
+//   - writes must be same-origin and carry X-Kuli-Request, a custom header that other
+//     origins cannot send without a CORS preflight we never grant.
+func (s *Server) guard(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
 		h.Set("X-Frame-Options", "DENY")
 		h.Set("Referrer-Policy", "no-referrer")
 		h.Set("Content-Security-Policy", "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:")
-		if r.Method == http.MethodPost {
+		if s.loopback && !loopbackHost(r.Host) {
+			fail(w, http.StatusForbidden, "unexpected Host header")
+			return
+		}
+		if r.Method != http.MethodGet && r.Method != http.MethodHead {
 			if origin := r.Header.Get("Origin"); origin != "" && !sameHost(origin, r.Host) {
 				fail(w, http.StatusForbidden, "cross-origin request refused")
+				return
+			}
+			if r.Header.Get("X-Kuli-Request") != "1" {
+				fail(w, http.StatusForbidden, "missing X-Kuli-Request header")
 				return
 			}
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+func loopbackHost(hostport string) bool {
+	host := hostport
+	if h, _, err := net.SplitHostPort(hostport); err == nil {
+		host = h
+	}
+	host = strings.Trim(host, "[]")
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
 func sameHost(origin, host string) bool {
@@ -160,6 +195,7 @@ func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 		"manifests":     st.Manifests,
 		"llm":           s.llm != nil,
 		"model":         modelName(s.llm),
+		"readOnly":      s.readOnly,
 	})
 }
 
@@ -312,7 +348,10 @@ func (s *Server) file(w http.ResponseWriter, r *http.Request) {
 		resp["tooLarge"] = true
 	} else if b, err := os.ReadFile(full); err == nil {
 		resp["lines"] = strings.Split(strings.TrimRight(string(b), "\n"), "\n")
+		resp["content"] = string(b)
+		resp["hash"] = hashOf(b)
 	}
+	resp["writable"] = !s.readOnly
 	syms, _ := s.store.FileSymbols(fi.Path)
 	_, importers, _ := s.store.Deps(fi.Path, true)
 	_, imports, _ := s.store.Deps(fi.Path, false)
@@ -433,9 +472,25 @@ func (s *Server) ask(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) rescan(w http.ResponseWriter, r *http.Request) {
-	if !s.scanM.TryLock() {
-		fail(w, http.StatusConflict, "a scan is already running")
+	files, d, err := s.rescanNow(false)
+	if errors.Is(err, errScanBusy) {
+		fail(w, http.StatusConflict, err.Error())
 		return
+	} else if err != nil {
+		fail(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, map[string]any{"files": files, "ms": d.Milliseconds()})
+}
+
+var errScanBusy = errors.New("a scan is already running")
+
+// rescanNow rebuilds the knowledge base; wait=false fails fast when one is running.
+func (s *Server) rescanNow(wait bool) (int, time.Duration, error) {
+	if wait {
+		s.scanM.Lock()
+	} else if !s.scanM.TryLock() {
+		return 0, 0, errScanBusy
 	}
 	defer s.scanM.Unlock()
 	res, err := scan.Scan(s.root)
@@ -446,11 +501,120 @@ func (s *Server) rescan(w http.ResponseWriter, r *http.Request) {
 		err = s.reload()
 	}
 	if err != nil {
+		return 0, 0, err
+	}
+	log.Printf("rescanned %s: %d files in %s", s.root, len(res.Files), res.Duration.Round(time.Millisecond))
+	return len(res.Files), res.Duration, nil
+}
+
+// scheduleRescan refreshes the knowledge base shortly after edits, coalescing bursts
+// of saves into one scan.
+func (s *Server) scheduleRescan() {
+	s.rescanMu.Lock()
+	defer s.rescanMu.Unlock()
+	if s.rescanDue != nil {
+		s.rescanDue.Stop()
+	}
+	s.rescanDue = time.AfterFunc(1500*time.Millisecond, func() {
+		if _, _, err := s.rescanNow(true); err != nil {
+			log.Printf("background rescan: %v", err)
+		}
+	})
+}
+
+const maxSaveBytes = 5 << 20
+
+func hashOf(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:])
+}
+
+// saveFile writes one file with optimistic concurrency: the client sends the hash of
+// the version it edited, and a mismatch with the disk (someone else changed it) is a
+// 409 carrying the current hash, never a silent overwrite.
+func (s *Server) saveFile(w http.ResponseWriter, r *http.Request) {
+	if s.readOnly {
+		fail(w, http.StatusForbidden, "this workspace is read-only (kuli serve --read-only)")
+		return
+	}
+	var req struct {
+		Path     string `json:"path"`
+		Content  string `json:"content"`
+		BaseHash string `json:"baseHash"`
+		Force    bool   `json:"force"`
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxSaveBytes+64<<10)).Decode(&req); err != nil {
+		fail(w, http.StatusBadRequest, "bad request body")
+		return
+	}
+	if len(req.Content) > maxSaveBytes {
+		fail(w, http.StatusRequestEntityTooLarge, "file too large to save from the editor")
+		return
+	}
+	fi, err := s.store.File(req.Path)
+	if err != nil {
+		fail(w, http.StatusNotFound, "only files in the knowledge base can be saved")
+		return
+	}
+	full := filepath.Join(s.root, filepath.FromSlash(fi.Path))
+	if rel, err := filepath.Rel(s.root, full); err != nil || strings.HasPrefix(rel, "..") || strings.HasPrefix(filepath.ToSlash(rel), ".git/") {
+		fail(w, http.StatusForbidden, "outside the editable workspace")
+		return
+	}
+	info, err := os.Lstat(full)
+	if err != nil {
+		fail(w, http.StatusNotFound, "file no longer on disk")
+		return
+	}
+	if !info.Mode().IsRegular() {
+		fail(w, http.StatusForbidden, "not a regular file") // never write through symlinks
+		return
+	}
+	cur, err := os.ReadFile(full)
+	if err != nil {
 		fail(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	log.Printf("rescanned %s: %d files in %s", s.root, len(res.Files), res.Duration.Round(time.Millisecond))
-	writeJSON(w, map[string]any{"files": len(res.Files), "ms": res.Duration.Milliseconds()})
+	if curHash := hashOf(cur); curHash != req.BaseHash && !req.Force {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusConflict)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error":       "the file changed on disk since you opened it",
+			"currentHash": curHash,
+		})
+		return
+	}
+	if err := writeAtomic(full, []byte(req.Content), info.Mode().Perm()); err != nil {
+		fail(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	s.scheduleRescan()
+	writeJSON(w, map[string]any{"hash": hashOf([]byte(req.Content)), "bytes": len(req.Content)})
+}
+
+// writeAtomic replaces path via a temp file in the same directory, so readers never see
+// a half-written file and a crash leaves the old version intact.
+func writeAtomic(path string, data []byte, perm os.FileMode) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".kuli-*")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name()) // no-op after a successful rename
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp.Name(), perm); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 func modelName(c docs.Chatter) string {

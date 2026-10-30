@@ -12,6 +12,7 @@ export function loadFile(path: string): Promise<FileView> {
   return p;
 }
 export const clearFileCache = () => cache.clear();
+export const forgetFile = (path: string) => cache.delete(path);
 
 export type Tab =
   | { id: string; kind: "welcome" }

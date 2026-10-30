@@ -40,6 +40,23 @@ export function Workbench() {
   const [quick, setQuick] = useState(false);
   const [cursor, setCursor] = useState<Cursor | null>(null);
   const [scan, setScan] = useState<"idle" | "busy" | string>("idle");
+  const [dirty, setDirty] = useState<Set<string>>(() => new Set());
+  const markDirty = useCallback((path: string, d: boolean) => {
+    setDirty((cur) => {
+      if (cur.has(path) === d) return cur;
+      const n = new Set(cur);
+      if (d) n.add(path); else n.delete(path);
+      return n;
+    });
+  }, []);
+
+  // Unsaved edits: warn before the page is closed or reloaded.
+  useEffect(() => {
+    if (dirty.size === 0) return;
+    const warn = (e: BeforeUnloadEvent) => e.preventDefault();
+    addEventListener("beforeunload", warn);
+    return () => removeEventListener("beforeunload", warn);
+  }, [dirty.size]);
 
   // Restore this repository's tabs once we know which repository it is.
   // Tabs opened before that (e.g. from a deep link) are kept and stay active.
@@ -71,13 +88,16 @@ export function Workbench() {
 
   const openFile = useCallback((path: string, from?: number, to?: number) => openTab({ kind: "file", path, from, to }), [openTab]);
 
-  const closeTab = (id: string) =>
+  const closeTab = (id: string) => {
+    const t = tabs.find((x) => x.id === id);
+    if (t?.kind === "file" && dirty.has(t.path) && !confirm(`${t.path} has unsaved changes. Close it and keep them only in this browser tab?`)) return;
     setState((s) => {
       const i = s.tabs.findIndex((t) => t.id === id);
       const tabs = s.tabs.filter((t) => t.id !== id);
       const next = s.active === id ? (tabs[Math.min(i, tabs.length - 1)]?.id ?? "") : s.active;
       return { tabs, active: next };
     });
+  };
 
   // Deep links (#/file/…#L10-L20 from citations, #/map?c=…, #/docs/…) open tabs.
   useEffect(() => {
@@ -174,6 +194,7 @@ export function Workbench() {
               onAuxClick={(e) => e.button === 1 && closeTab(t.id)}
               title={t.kind === "file" ? t.path : tabTitle(t)}>
               <span className="tab-name">{tabTitle(t)}</span>
+              {t.kind === "file" && dirty.has(t.path) && <span className="tab-dirty" aria-label="unsaved changes">●</span>}
               <button className="tab-x" aria-label={`Close ${tabTitle(t)}`} onClick={(e) => { e.stopPropagation(); closeTab(t.id); }}>
                 <Icon.close />
               </button>
@@ -188,7 +209,7 @@ export function Workbench() {
         <div className="editor-body">
           {!current && <EmptyEditor onQuick={() => setQuick(true)} />}
           {current?.kind === "file" && (
-            <CodeTab key={current.path} path={current.path} from={current.from} to={current.to} onOpen={openFile} onCursor={setCursor} />
+            <CodeTab key={current.path} path={current.path} from={current.from} to={current.to} onOpen={openFile} onCursor={setCursor} onDirty={markDirty} />
           )}
           {current?.kind === "map" && <MapView selected={current.component} />}
           {current?.kind === "doc" && <DocTab name={current.name} />}
@@ -208,7 +229,8 @@ export function Workbench() {
         {cursor && <span>Ln {cursor.line}, Col {cursor.col}</span>}
         {cursor && <span>{cursor.lang}</span>}
         <span>{ov.data?.llm ? `Model: ${ov.data.model}` : "No model"}</span>
-        <span>Read-only</span>
+        {dirty.size > 0 && <span className="st-warn">{dirty.size} unsaved</span>}
+        <span>{ov.data?.readOnly ? "Read-only" : "Ctrl+S saves"}</span>
       </footer>
 
       {quick && <QuickOpen files={files} onClose={() => setQuick(false)} onPick={(p) => { setQuick(false); openFile(p); }} />}

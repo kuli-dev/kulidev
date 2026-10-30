@@ -7,7 +7,7 @@ export type Overview = {
   repo: string; root: string; commit: string; head: string; stale: boolean; scannedAt: string;
   files: number; parsed: number; languages: Count[] | null; symbols: Count[] | null;
   internalEdges: number; externalMods: number; topInternal: Count[] | null; topExternal: Count[] | null;
-  manifests: Count[] | null; llm: boolean; model?: string;
+  manifests: Count[] | null; llm: boolean; model?: string; readOnly?: boolean;
 };
 
 export type GraphNode = { name: string; files: number; lines: number; lang: string; hub: string; hubImporters: number; hubDoc?: string };
@@ -22,6 +22,7 @@ export type Component = {
 
 export type FileView = {
   path: string; lang: string; doc: string; lines: string[]; tooLarge?: boolean;
+  content?: string; hash?: string; writable?: boolean;
   symbols: Hit[]; importers: Hit[]; imports: Hit[];
 };
 
@@ -34,10 +35,18 @@ export type TreeFile = { p: string; l?: string; n: number };
 
 export type AskResult = { answer: string; keywords: string[]; citations: number; removed: number; coverage: number; hits: number };
 
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number, readonly body: Record<string, unknown>) {
+    super(message);
+  }
+}
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, init);
+  // The server requires this header on writes: other origins can't send it.
+  const headers = { ...(init?.headers ?? {}), "X-Kuli-Request": "1" };
+  const res = await fetch(path, { ...init, headers });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || `${res.status} ${res.statusText}`);
+  if (!res.ok) throw new ApiError(body.error || `${res.status} ${res.statusText}`, res.status, body);
   return body as T;
 }
 
@@ -56,5 +65,10 @@ export const api = {
   doc: (name: string) => call<{ markdown: string }>(`api/docs/${q(name)}`),
   ask: (question: string) =>
     call<AskResult>("api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question }) }),
+  save: (path: string, content: string, baseHash: string, force = false) =>
+    call<{ hash: string; bytes: number }>("api/file", {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, content, baseHash, force }),
+    }),
   rescan: () => call<{ files: number; ms: number }>("api/rescan", { method: "POST" }),
 };

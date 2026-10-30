@@ -20,8 +20,9 @@ import (
 
 func newServeCmd(o *options) *cobra.Command {
 	var (
-		addr string
-		lf   llmFlags
+		addr     string
+		readOnly bool
+		lf       llmFlags
 	)
 	cmd := &cobra.Command{
 		Use:   "serve",
@@ -52,12 +53,18 @@ only on a network you trust. Run 'kuli scan' first.`,
 			} else {
 				fmt.Fprintf(os.Stderr, "kuli: %v — the Ask page will be disabled\n", err)
 			}
-			srv, err := server.New(root, dir, st, model, web.FS())
+			host, _, _ := net.SplitHostPort(addr)
+			loopback := host == "127.0.0.1" || host == "localhost" || host == "::1"
+			srv, err := server.New(root, dir, st, model, web.FS(), server.Options{ReadOnly: readOnly, Loopback: loopback})
 			if err != nil {
 				return err
 			}
-			if host, _, err := net.SplitHostPort(addr); err == nil && host != "127.0.0.1" && host != "localhost" && host != "::1" {
-				fmt.Fprintf(os.Stderr, "kuli: ⚠ listening on %s — anyone who can reach it can read this repository's code\n", addr)
+			if !loopback {
+				what := "read and edit"
+				if readOnly {
+					what = "read"
+				}
+				fmt.Fprintf(os.Stderr, "kuli: ⚠ listening on %s — anyone who can reach it can %s this repository's code\n", addr, what)
 			}
 			ln, err := net.Listen("tcp", addr)
 			if err != nil {
@@ -81,6 +88,7 @@ only on a network you trust. Run 'kuli scan' first.`,
 		},
 	}
 	cmd.Flags().StringVar(&addr, "addr", "127.0.0.1:7878", "listen address")
+	cmd.Flags().BoolVar(&readOnly, "read-only", false, "browse only: refuse to save files")
 	lf.add(cmd, 2048)
 	return cmd
 }
