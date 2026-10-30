@@ -21,6 +21,14 @@
 - **Git in a folder of several repositories**: the Changes panel lists every repository
   with its branch and change count; pick one to commit, switch branches, pull or push.
   Diffs, gutter markers and staging work for files in any of them.
+- **Markdown preview** for .md files (Code / Split / Preview), updating as you type, with
+  Mermaid diagrams drawn in place; relative links open the linked file. Docs and Ask
+  answers draw their diagrams too. .mmd files preview as a diagram.
+- **Diagram editor**: Edit / Delete on every diagram, Insert diagram in the bar. Code,
+  canvas and live preview side by side; on the canvas drag shapes in from the palette,
+  move nodes, drag between nodes to connect, rename and restyle in the side panel,
+  Delete to remove. Changes go into the file as one undoable edit (Apply, or Apply and
+  save). Flowcharts are visual; other diagram types are edited as code with the preview.
 - **Title bar** like VS Code: File, Edit, View, Go, Terminal and Help menus; a command
   center that opens Go to file; local/remote status; toggles for the side bar, terminal
   panel and Ask panel; Settings. **Command palette** (Ctrl+Shift+P) runs any menu
