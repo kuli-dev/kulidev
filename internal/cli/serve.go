@@ -10,7 +10,9 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -113,7 +115,9 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 				network = "tcp4" // "all IPv4 interfaces", as asked (and what WSL forwards)
 			}
 			ln, err := net.Listen(network, addr)
-			if err != nil {
+			if errors.Is(err, syscall.EADDRINUSE) {
+				return fmt.Errorf("port %s is already in use (another kuli serve?) — stop it or pick another, e.g. --addr %s:%d", port, host, portPlus(port))
+			} else if err != nil {
 				return err
 			}
 			scheme := "http"
@@ -161,6 +165,11 @@ own --tls-cert/--tls-key, or --insecure-http when the network is already encrypt
 	f.BoolVar(&insecure, "insecure-http", false, "allow plain HTTP on a network address (only on an already-encrypted network)")
 	lf.add(cmd, 2048)
 	return cmd
+}
+
+func portPlus(p string) int {
+	n, _ := strconv.Atoi(p)
+	return n + 1
 }
 
 // printPairing shows a one-time code, the URLs that carry it, and a QR code for phones.
