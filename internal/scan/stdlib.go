@@ -73,9 +73,25 @@ func IsStdlib(name string) bool {
 		return pythonStdlib[mod]
 	case "node":
 		return true
+	case "java":
+		return strings.HasPrefix(mod, "java.") || strings.HasPrefix(mod, "javax.") || strings.HasPrefix(mod, "jdk.")
+	case "php":
+		return !strings.Contains(mod, "\\") && phpGlobal(mod) // use Exception; use DateTime;
 	case "npm":
 		base, _, _ := strings.Cut(strings.TrimPrefix(mod, "node:"), "/")
 		return strings.HasPrefix(mod, "node:") || nodeBuiltins[base]
+	}
+	return false
+}
+
+// phpGlobal reports whether a single-segment PHP name is a built-in class.
+func phpGlobal(name string) bool {
+	switch name {
+	case "Exception", "Throwable", "Error", "DateTime", "DateTimeImmutable", "DateTimeInterface", "DateInterval",
+		"Closure", "Generator", "ArrayObject", "ArrayIterator", "Iterator", "IteratorAggregate", "Countable",
+		"JsonSerializable", "Stringable", "Traversable", "PDO", "PDOException", "stdClass", "InvalidArgumentException",
+		"RuntimeException", "LogicException", "TypeError", "ValueError", "SplObjectStorage":
+		return true
 	}
 	return false
 }

@@ -68,3 +68,82 @@ func TestIsStdlib(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveJavaAndPHP(t *testing.T) {
+	files := []string{
+		"service/src/main/java/com/acme/billing/InvoiceService.java",
+		"service/src/main/java/com/acme/model/Invoice.java",
+		"service/src/main/java/com/acme/util/Money.java",
+		"app/Models/User.php", "app/Http/Controllers/InvoiceController.php", "app/Http/Controllers/helpers.php",
+		"legacy/old.php",
+		"plugins/mail/composer.json", "plugins/mail/src/WP.php", "plugins/mail/src/Admin/Area.php",
+		"wp/wp-admin/includes/upgrade.php",
+	}
+	r := newResolver(files, func(p string) []byte {
+		if p == "plugins/mail/composer.json" {
+			return []byte(`{"autoload":{"psr-4":{"WPMailSMTP\\":"src/"}}}`)
+		}
+		return nil
+	})
+	cases := []struct {
+		lang, from, spec string
+		want             Target
+	}{
+		{"Java", files[0], "com.acme.model.Invoice", Target{TargetFile, files[1]}},
+		{"Java", files[0], "com.acme.util.Money.cents", Target{TargetFile, files[2]}}, // static import
+		{"Java", files[0], "com.acme.model", Target{TargetPackage, "service/src/main/java/com/acme/model"}},
+		{"Java", files[0], "java.util.List", Target{TargetExternal, "java:java.util"}},
+		{"Java", files[0], "org.springframework.web.bind.annotation.GetMapping", Target{TargetExternal, "java:org.springframework"}},
+		{"PHP", files[4], "App\\Models\\User", Target{TargetFile, "app/Models/User.php"}}, // PSR-4: App\ → app/
+		{"PHP", files[4], "/helpers.php", Target{TargetFile, "app/Http/Controllers/helpers.php"}},
+		{"PHP", "index.php", "legacy/old.php", Target{TargetFile, "legacy/old.php"}},
+		{"PHP", files[4], "Illuminate\\Http\\Request", Target{TargetExternal, "php:Illuminate"}},
+		{"PHP", files[4], "Exception", Target{TargetExternal, "php:Exception"}},
+		// composer.json PSR-4: WPMailSMTP\ → plugins/mail/src/
+		{"PHP", files[4], "WPMailSMTP\\WP", Target{TargetFile, "plugins/mail/src/WP.php"}},
+		{"PHP", files[4], "WPMailSMTP\\Admin\\Area", Target{TargetFile, "plugins/mail/src/Admin/Area.php"}},
+		// ABSPATH . 'wp-admin/includes/upgrade.php': unknown base, found by suffix
+		{"PHP", "plugins/mail/src/WP.php", "@wp-admin/includes/upgrade.php", Target{TargetFile, "wp/wp-admin/includes/upgrade.php"}},
+		{"PHP", "plugins/mail/src/WP.php", "@wp-admin/includes/missing.php", Target{TargetExternal, "php:include"}},
+		{"PHP", "plugins/mail/src/WP.php", "/vendor/autoload.php", Target{TargetExternal, "composer:vendor"}},
+	}
+	for _, c := range cases {
+		if got := r.resolve(c.lang, c.from, c.spec, false); got != c.want {
+			t.Errorf("resolve(%s, %q) = %+v, want %+v", c.lang, c.spec, got, c.want)
+		}
+	}
+	for name, want := range map[string]bool{"java:java.util": true, "java:org.springframework": false, "php:Exception": true, "php:Illuminate": false} {
+		if IsStdlib(name) != want {
+			t.Errorf("IsStdlib(%q) = %v", name, !want)
+		}
+	}
+}
+
+func TestGeneratedPSR4AndSkipped(t *testing.T) {
+	gen := `<?php
+$vendorDir = dirname(__DIR__);
+$baseDir = dirname($vendorDir);
+return array(
+    'WPMailSMTP\\Vendor\\' => array($baseDir . '/vendor_prefixed'),
+    'WPMailSMTP\\' => array($baseDir . '/src'),
+    'Psr\\Log\\' => array($vendorDir . '/psr/log/src'),
+);`
+	files := []string{"plugin/wp-mail-smtp.php", "plugin/src/WP.php", "plugin/vendor_prefixed/Monolog/Logger.php"}
+	r := newResolver(files, func(p string) []byte {
+		if p == "plugin/vendor/composer/autoload_psr4.php" {
+			return []byte(gen)
+		}
+		return nil
+	})
+	for spec, want := range map[string]Target{
+		"WPMailSMTP\\WP":                      {TargetFile, "plugin/src/WP.php"},
+		"WPMailSMTP\\Vendor\\Monolog\\Logger": {TargetFile, "plugin/vendor_prefixed/Monolog/Logger.php"},
+	} {
+		if got := r.resolve("PHP", "plugin/src/WP.php", spec, false); got != want {
+			t.Errorf("%s → %+v, want %+v", spec, got, want)
+		}
+	}
+	if got := r.resolve("TypeScript", "web/app.ts", "./build/gen", false); got.Ref != "skipped:web/build/gen" {
+		t.Errorf("import into a skipped folder = %+v", got)
+	}
+}

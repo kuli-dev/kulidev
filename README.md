@@ -175,8 +175,8 @@ Every answer warns the agent when `HEAD` has moved since the last scan.
 
 | | |
 |---|---|
-| **Parsed with Tree-sitter** | Go, Python, JavaScript, TypeScript/TSX — functions, methods, classes, structs, interfaces, types, enums, Go package vars/consts, imports, **doc comments & docstrings** |
-| **Import resolution** | Go modules (multi-module), Python absolute/relative/namespace packages, JS/TS relative, `index.*`, `package.json` entry points, ESM `.js→.ts`, `@/` `~/` aliases |
+| **Parsed with Tree-sitter** | Go, Python, JavaScript, TypeScript/TSX, Java, PHP — functions, methods, classes, structs, interfaces, types, enums, Go package vars/consts, imports, **doc comments & docstrings** |
+| **Import resolution** | Go modules (multi-module), Python absolute/relative/namespace packages, JS/TS relative, `index.*`, `package.json` entry points, ESM `.js→.ts`, `@/` `~/` aliases, Java packages under any source root (static and on-demand imports), PHP PSR-4 from `composer.json` or Composer's generated autoload map, `require`/`include` incl. `__DIR__` |
 | **Detected** | Dockerfile, Compose, Kubernetes YAML, kustomize, Helm, Terraform, GitHub Actions, Jenkins, GitLab CI, SQL migrations, dependency manifests |
 | **Storage** | One SQLite file; FTS5 with stemming over names, docs and body words; git-ignored by default |
 

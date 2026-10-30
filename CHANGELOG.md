@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- **Java and PHP**: definitions with Javadoc/PHPDoc; Java imports resolved by package path
+  under any source root; PHP `use` resolved through composer.json PSR-4 maps or Composer's
+  generated `vendor/composer/autoload_psr4.php`, `require`/`include` relative to the file
+  for plain paths and `__DIR__`, found anywhere for other bases (`ABSPATH . '…'`).
+  Measured on a 2.6M-line Java + PHP tree: every project-internal Java import resolves;
+  PHP 69% to files.
+- Imports pointing into skipped folders (build/, dist/, vendor/) are no longer reported as
+  broken.
+- **Pulse**: answer an agent from the card — reply box plus ↑ ↓ Enter Esc Ctrl+C.
+
 ## 0.1.0
 
 First release. KuliDev reads a codebase, builds an evidence-backed knowledge graph, and puts

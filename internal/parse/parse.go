@@ -7,7 +7,9 @@ import (
 
 	ts "github.com/tree-sitter/go-tree-sitter"
 	tsgo "github.com/tree-sitter/tree-sitter-go/bindings/go"
+	tsjava "github.com/tree-sitter/tree-sitter-java/bindings/go"
 	tsjs "github.com/tree-sitter/tree-sitter-javascript/bindings/go"
+	tsphp "github.com/tree-sitter/tree-sitter-php/bindings/go"
 	tspy "github.com/tree-sitter/tree-sitter-python/bindings/go"
 	tsts "github.com/tree-sitter/tree-sitter-typescript/bindings/go"
 
@@ -21,6 +23,8 @@ const (
 	JavaScript = "javascript"
 	TypeScript = "typescript"
 	TSX        = "tsx"
+	Java       = "java"
+	PHP        = "php"
 )
 
 type grammar struct {
@@ -34,6 +38,8 @@ var grammars = map[string]grammar{
 	JavaScript: {ts.NewLanguage(tsjs.Language()), javascriptQuery},
 	TypeScript: {ts.NewLanguage(tsts.LanguageTypescript()), typescriptQuery},
 	TSX:        {ts.NewLanguage(tsts.LanguageTSX()), typescriptQuery},
+	Java:       {ts.NewLanguage(tsjava.Language()), javaQuery},
+	PHP:        {ts.NewLanguage(tsphp.LanguagePHP()), phpQuery},
 }
 
 // Supported reports whether a grammar exists for the given identifier.
@@ -103,7 +109,7 @@ func (pr *Parser) Parse(grammarID string, src []byte) (*Result, error) {
 	matches := pr.cursor.Matches(q, tree.RootNode(), src)
 	for m := matches.Next(); m != nil; m = matches.Next() {
 		var def, importNode *ts.Node
-		var kind, name, recv, typebody, fn, imp string
+		var kind, name, recv, typebody, fn, imp, base string
 		impLine := 0
 		for i := range m.Captures {
 			c := &m.Captures[i]
@@ -119,6 +125,8 @@ func (pr *Parser) Parse(grammarID string, src []byte) (*Result, error) {
 				typebody = c.Node.Kind()
 			case cn == "fn":
 				fn = c.Node.Utf8Text(src)
+			case cn == "base":
+				base = strings.Join(strings.Fields(c.Node.Utf8Text(src)), "")
 			case cn == "import":
 				n := c.Node
 				imp, importNode = n.Utf8Text(src), &n
@@ -131,6 +139,14 @@ func (pr *Parser) Parse(grammarID string, src []byte) (*Result, error) {
 				continue
 			}
 			spec := unquote(imp)
+			if grammarID == PHP {
+				spec = strings.TrimPrefix(spec, "\\") // use \Foo\Bar → Foo\Bar
+				// BASE . 'x.php': only __DIR__ / dirname(__FILE__) mean "this file's folder";
+				// anything else (ABSPATH, a config constant) marks an unknown base with "@".
+				if base != "" && base != "__DIR__" && base != "dirname(__FILE__)" {
+					spec = "@" + strings.TrimPrefix(spec, "/")
+				}
+			}
 			if grammarID == Python && strings.Trim(spec, ".") == "" {
 				// "from . import a, b": a and b are sibling modules (or names in __init__).
 				if subs := pyFromNames(importNode, src); len(subs) > 0 {
@@ -180,9 +196,13 @@ func (pr *Parser) Parse(grammarID string, src []byte) (*Result, error) {
 
 var classKinds = map[string]bool{
 	"class_definition":           true, // python
-	"class_declaration":          true, // js/ts
+	"class_declaration":          true, // js/ts, java, php
 	"abstract_class_declaration": true, // ts
 	"class":                      true, // js/ts class expression
+	"interface_declaration":      true, // java, php (methods declared in interfaces)
+	"enum_declaration":           true, // java, php
+	"record_declaration":         true, // java
+	"trait_declaration":          true, // php
 }
 
 // enclosingClass returns the name of the nearest class containing n, if any.

@@ -56,6 +56,11 @@ the workspace, IDE and remote features are layered on top.
 - [x] Pulse: agent state (working / waiting / finished) with rendered output tail; Review with commit/discard all; notifications via a service worker
 - [x] Answer an agent from Pulse: reply box plus ↑ ↓ Enter Esc Ctrl+C keys
 
+## Languages
+- [x] Go, Python, JavaScript, TypeScript, Java, PHP
+- [ ] PHP class index (namespace + class → file) for code without PSR-4 (WordPress core style)
+- [ ] C#, Ruby, Rust, Kotlin; SQL schema parsing
+
 ## Later
 - Desktop shell (Tauri), mobile PWA, remote workspaces + device pairing, Postgres for teams,
   more languages via parser plugins.

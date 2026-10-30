@@ -70,7 +70,7 @@ func fileDoc(grammarID string, root *ts.Node, src []byte) string {
 func leadingComment(n *ts.Node, src []byte) string {
 	var parts []string
 	nextRow := n.StartPosition().Row
-	for p := n.PrevSibling(); p != nil && p.Kind() == "comment"; p = p.PrevSibling() {
+	for p := n.PrevSibling(); p != nil && strings.HasSuffix(p.Kind(), "comment"); p = p.PrevSibling() { // comment, block_comment, line_comment
 		if p.EndPosition().Row+1 < nextRow {
 			break // blank line between comment and declaration: not its doc
 		}

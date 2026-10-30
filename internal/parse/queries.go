@@ -8,6 +8,7 @@ package parse
 //	@typebody    Go type_spec body (refines kind to struct/interface)
 //	@import      an import specifier (string literal or dotted name)
 //	@fn          callee of a call whose first string argument is @import (require)
+//	@base        PHP: left side of BASE . 'path.php' in require/include
 
 const goQuery = `
 (function_declaration name: (identifier) @name) @def.function
@@ -51,4 +52,33 @@ const typescriptQuery = `
 (import_statement source: (string) @import)
 (export_statement source: (string) @import)
 (call_expression function: (identifier) @fn arguments: (arguments . (string) @import))
+`
+
+const javaQuery = `
+(class_declaration name: (identifier) @name) @def.class
+(record_declaration name: (identifier) @name) @def.class
+(interface_declaration name: (identifier) @name) @def.interface
+(annotation_type_declaration name: (identifier) @name) @def.interface
+(enum_declaration name: (identifier) @name) @def.enum
+(method_declaration name: (identifier) @name) @def.method
+(constructor_declaration name: (identifier) @name) @def.method
+(import_declaration [(scoped_identifier) (identifier)] @import)
+`
+
+const phpQuery = `
+(function_definition name: (name) @name) @def.function
+(class_declaration name: (name) @name) @def.class
+(trait_declaration name: (name) @name) @def.class
+(interface_declaration name: (name) @name) @def.interface
+(enum_declaration name: (name) @name) @def.enum
+(method_declaration name: (name) @name) @def.method
+(namespace_use_clause [(qualified_name) (name)] @import)
+(require_expression [(string) (encapsed_string)] @import)
+(require_once_expression [(string) (encapsed_string)] @import)
+(include_expression [(string) (encapsed_string)] @import)
+(include_once_expression [(string) (encapsed_string)] @import)
+(require_once_expression (binary_expression left: (_) @base right: [(string) (encapsed_string)] @import))
+(require_expression (binary_expression left: (_) @base right: [(string) (encapsed_string)] @import))
+(include_once_expression (binary_expression left: (_) @base right: [(string) (encapsed_string)] @import))
+(include_expression (binary_expression left: (_) @base right: [(string) (encapsed_string)] @import))
 `

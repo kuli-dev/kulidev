@@ -236,3 +236,82 @@ class A {
 		}
 	}
 }
+
+func TestJava(t *testing.T) {
+	got, _ := docs(t, Java, `package com.acme.billing;
+
+import java.util.List;
+import static com.acme.util.Money.cents;
+import com.acme.model.*;
+
+/**
+ * Bills customers.
+ * @author someone
+ */
+public class InvoiceService implements Billing {
+    /** Creates the service. */
+    public InvoiceService() {}
+
+    /** Charges one invoice. */
+    public long charge(Invoice inv) { return cents(inv.total()); }
+
+    record Line(String sku, long amount) {}
+}
+
+interface Billing { long charge(Invoice inv); }
+enum Status { OPEN, PAID }
+`)
+	want := map[string]string{
+		"InvoiceService": "Bills customers.", "InvoiceService.InvoiceService": "Creates the service.",
+		"InvoiceService.charge": "Charges one invoice.", "Billing": "", "Status": "",
+	}
+	for k, v := range want {
+		if d, ok := got[k]; !ok || d != v {
+			t.Errorf("java %s: doc %q (present %v), want %q — all: %v", k, d, ok, v, got)
+		}
+	}
+	syms, imps := parse(t, Java, `import java.util.List;
+import static com.acme.util.Money.cents;
+import com.acme.model.*;
+class A { void b() {} }
+`)
+	expect(t, names(syms), map[string]string{"A": "class", "A.b": "method"})
+	expectImports(t, specs(imps), "java.util.List", "com.acme.util.Money.cents", "com.acme.model")
+}
+
+func TestPHP(t *testing.T) {
+	src := `<?php
+namespace App\Http\Controllers;
+
+use App\Models\User;
+use Illuminate\Http\Request as Req;
+require_once __DIR__ . '/helpers.php';
+require_once ABSPATH . 'wp-admin/includes/upgrade.php';
+include 'legacy/old.php';
+
+/**
+ * Handles invoices.
+ */
+class InvoiceController extends Controller
+{
+    /** Show one invoice. */
+    public function show(Req $r, int $id) { return User::find($id); }
+}
+
+trait Auditable { public function audit() {} }
+interface Payable { public function pay(); }
+
+/** Format money. */
+function money(int $cents): string { return number_format($cents / 100, 2); }
+`
+	syms, imps := parse(t, PHP, src)
+	expect(t, names(syms), map[string]string{
+		"InvoiceController": "class", "InvoiceController.show": "method", "Auditable": "class",
+		"Auditable.audit": "method", "Payable": "interface", "money": "function",
+	})
+	expectImports(t, specs(imps), "App\\Models\\User", "Illuminate\\Http\\Request", "/helpers.php", "legacy/old.php", "@wp-admin/includes/upgrade.php")
+	got, _ := docs(t, PHP, src)
+	if got["InvoiceController"] != "Handles invoices." || got["InvoiceController.show"] != "Show one invoice." || got["money"] != "Format money." {
+		t.Errorf("php docs = %v", got)
+	}
+}
