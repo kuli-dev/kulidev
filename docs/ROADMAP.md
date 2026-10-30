@@ -10,7 +10,7 @@ the workspace, IDE and remote features are layered on top.
 - [x] SQLite knowledge graph with provenance on every edge; FTS search
 - [x] `kuli scan`, `stats`, `find`, `deps`
 - [ ] Filter language stdlibs out of "external modules" (Python, Node builtins)
-- [ ] Incremental re-scan by content hash (only changed files)
+- [x] Incremental re-scan: size/mtime → hash → re-parse only changed files; imports re-resolved from stored specs (3.5 s → 90 ms on 1.5M lines); `--full` to rebuild
 - [x] Report broken imports (targets that don't exist) as findings
 - [ ] Infra graph: Compose services, K8s Deployments/Services, Dockerfile → image
 - [ ] Framework detection: HTTP routes (FastAPI, Express, Next.js, Gin/Chi), ORM models
@@ -39,7 +39,7 @@ the workspace, IDE and remote features are layered on top.
 - [x] Edit + save files: content-hash conflict detection, atomic writes, background re-index, --read-only
 - [x] Integrated terminal: xterm.js + server PTY over WebSocket; sessions persist and replay scrollback on reconnect
 - [x] Agent sessions in the workbench terminal: Claude Code (--mcp-config) and Codex (-c mcp_servers…) start with kuli MCP attached; OpenCode/Aider detected
-- [ ] Lazy-load Monaco so the first paint doesn't wait for 1 MB of editor
+- [x] Lazy-load Monaco, the map and the terminal (first download 1,026 KB → 103 KB gzipped)
 
 ## Later
 - Desktop shell (Tauri), mobile PWA, remote workspaces + device pairing, Postgres for teams,

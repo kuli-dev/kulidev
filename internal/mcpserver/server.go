@@ -201,11 +201,7 @@ func (s *Server) register(srv *mcp.Server) {
 func (s *Server) Rescan() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	res, err := scan.Scan(s.root)
-	if err != nil {
-		return err
-	}
-	_, err = s.store.Save(res)
+	_, err := s.store.Refresh(s.root, false)
 	return err
 }
 

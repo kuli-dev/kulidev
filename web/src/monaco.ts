@@ -91,17 +91,7 @@ matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => mona
 
 // ---- knowledge providers -----------------------------------------------------
 
-const defCache = new Map<string, Promise<Hit[]>>();
-function definitions(name: string): Promise<Hit[]> {
-  if (!/^[A-Za-z_][A-Za-z0-9_]{1,80}$/.test(name)) return Promise.resolve([]);
-  let p = defCache.get(name);
-  if (!p) {
-    p = api.definition(name).then((r) => r.hits, () => []);
-    defCache.set(name, p);
-  }
-  return p;
-}
-export const clearDefinitionCache = () => defCache.clear();
+import { definitions } from "./defs";
 
 // Same-language definitions first: from Python, a Python class beats a TypeScript
 // interface with the same name. Others are kept only when nothing matches.

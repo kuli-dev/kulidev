@@ -509,18 +509,15 @@ func (s *Server) rescanNow(wait bool) (int, time.Duration, error) {
 		return 0, 0, errScanBusy
 	}
 	defer s.scanM.Unlock()
-	res, err := scan.Scan(s.root)
-	if err == nil {
-		_, err = s.store.Save(res)
-	}
+	sum, err := s.store.Refresh(s.root, false)
 	if err == nil {
 		err = s.reload()
 	}
 	if err != nil {
 		return 0, 0, err
 	}
-	log.Printf("rescanned %s: %d files in %s", s.root, len(res.Files), res.Duration.Round(time.Millisecond))
-	return len(res.Files), res.Duration, nil
+	log.Printf("refreshed %s: %s", s.root, sum)
+	return sum.Files, sum.Duration, nil
 }
 
 // scheduleRescan refreshes the knowledge base shortly after edits, coalescing bursts

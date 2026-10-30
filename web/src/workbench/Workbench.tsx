@@ -1,18 +1,24 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "../api";
 import { useLoad } from "../hooks";
-import { clearDefinitionCache } from "../monaco";
+import { clearDefinitionCache } from "../defs";
 import { parse, type Route } from "../router";
-import { MapView } from "../views/Map";
+
 import { OverviewView } from "../views/Overview";
 import { Chat } from "./Chat";
-import { CodeTab, type Cursor } from "./CodeTab";
+import type { Cursor } from "./CodeTab";
 import { DocTab } from "./DocTab";
 import { clearFileCache, tabTitle, type NewTab, type Tab } from "./files";
 import { Icon } from "./Icons";
 import { QuickOpen } from "./QuickOpen";
-import { TerminalPanel } from "./Terminal";
+
 import { AgentsPane, DocsPane, Explorer, IssuesPane, SearchPane } from "./SidePanes";
+
+// The editor (Monaco, ~1 MB) loads on first file open, not with the page.
+const CodeTab = lazy(() => import("./CodeTab").then((m) => ({ default: m.CodeTab })));
+// Likewise the map (React Flow) and the terminal (xterm.js).
+const MapView = lazy(() => import("../views/Map").then((m) => ({ default: m.MapView })));
+const TerminalPanel = lazy(() => import("./Terminal").then((m) => ({ default: m.TerminalPanel })));
 
 type View = "explorer" | "search" | "docs" | "issues" | "agents";
 
@@ -222,13 +228,23 @@ export function Workbench() {
         <div className="editor-body">
           {!current && <EmptyEditor onQuick={() => setQuick(true)} />}
           {current?.kind === "file" && (
+            <Suspense fallback={<p className="muted pad">Loading the editor…</p>}>
             <CodeTab key={current.path} path={current.path} from={current.from} to={current.to} onOpen={openFile} onCursor={setCursor} onDirty={markDirty} />
+            </Suspense>
           )}
-          {current?.kind === "map" && <MapView selected={current.component} />}
+          {current?.kind === "map" && (
+            <Suspense fallback={<p className="muted pad">Loading the map…</p>}>
+              <MapView selected={current.component} />
+            </Suspense>
+          )}
           {current?.kind === "doc" && <DocTab name={current.name} />}
           {current?.kind === "welcome" && <div className="welcome-tab"><OverviewView ov={ov} onRescan={rescan} /></div>}
         </div>
-        {termOpen && ov.data?.terminals && <TerminalPanel height={termH} focus={termFocus} onResize={setTermH} onClose={() => setTermOpen(false)} />}
+        {termOpen && ov.data?.terminals && (
+          <Suspense fallback={<p className="muted pad">Loading the terminal…</p>}>
+            <TerminalPanel height={termH} focus={termFocus} onResize={setTermH} onClose={() => setTermOpen(false)} />
+          </Suspense>
+        )}
       </section>
 
       {chat && <Chat enabled={ov.data?.llm ?? false} model={ov.data?.model} onClose={() => setChat(false)} />}

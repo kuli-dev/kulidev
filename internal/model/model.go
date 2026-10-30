@@ -34,6 +34,7 @@ type FileResult struct {
 	Path    string // slash-separated, relative to the scan root
 	Lang    string // display language, "" when unknown
 	Size    int64
+	MtimeNS int64
 	Lines   int
 	SHA256  string
 	Parsed  bool

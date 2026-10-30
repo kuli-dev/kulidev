@@ -21,13 +21,13 @@ an MCP server so coding agents can use the same knowledge, DocsMana handover doc
 ```sh
 make build            # → bin/kuli  (needs Go 1.23+ and a C compiler for Tree-sitter)
 
-kuli scan ./my-repo   # build the knowledge base in my-repo/.kulidev/
+kuli scan ./my-repo   # build the knowledge base in my-repo/.kulidev/ (later runs are incremental)
 kuli -C my-repo stats
 kuli -C my-repo find payment service          # camelCase / snake_case aware
 kuli -C my-repo deps app/core/database.py --reverse   # who depends on this?
 ```
 
-Example (a 1.5M-line Python monolith, ~6 s on a laptop):
+Example (a 1.5M-line Python monolith: ~3.5 s for the first scan, ~90 ms to refresh after an edit):
 
 ```
 Symbols    42,610 functions · 14,588 methods · 5,939 classes

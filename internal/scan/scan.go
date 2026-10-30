@@ -21,10 +21,11 @@ const MaxParseBytes = 1 << 20
 
 // ImportEdge is a resolved import with its source evidence.
 type ImportEdge struct {
-	From   string // importing file
-	Line   int
-	Spec   string
-	Target Target
+	From        string // importing file
+	Line        int
+	Spec        string
+	MaybeSymbol bool
+	Target      Target
 }
 
 // Result is the outcome of one scan.
@@ -100,7 +101,7 @@ func Scan(root string) (*Result, error) {
 	for _, f := range res.Files {
 		for _, imp := range f.Imports {
 			res.Imports = append(res.Imports, ImportEdge{
-				From: f.Path, Line: imp.Line, Spec: imp.Spec,
+				From: f.Path, Line: imp.Line, Spec: imp.Spec, MaybeSymbol: imp.MaybeSymbol,
 				Target: r.resolve(f.Lang, f.Path, imp.Spec, imp.MaybeSymbol),
 			})
 		}
@@ -114,7 +115,11 @@ func analyzeFile(p *parse.Parser, root, rel string) (model.FileResult, string) {
 	li := detectLang(rel)
 	fr.Lang = li.name
 
-	b, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+	full := filepath.Join(root, filepath.FromSlash(rel))
+	if info, err := os.Stat(full); err == nil {
+		fr.MtimeNS = info.ModTime().UnixNano()
+	}
+	b, err := os.ReadFile(full)
 	if err != nil {
 		fr.Err = err.Error()
 		return fr, ""

@@ -14,6 +14,7 @@ import (
 
 	_ "modernc.org/sqlite"
 
+	"github.com/kuli-dev/kulidev/internal/model"
 	"github.com/kuli-dev/kulidev/internal/scan"
 )
 
@@ -25,7 +26,7 @@ const DBFile = "kulidev.db"
 
 // schemaVersion changes whenever the schema does. The database is a cache rebuilt by
 // `kuli scan`, so an older one is simply dropped instead of migrated.
-const schemaVersion = 4
+const schemaVersion = 5
 
 // ErrStale is returned when the knowledge base was built by an older kuli.
 var ErrStale = errors.New("knowledge base was built by an older kuli; run `kuli scan` to rebuild it")
@@ -121,58 +122,17 @@ func (s *Store) Save(res *scan.Result) (runID int64, err error) {
 	}
 	defer ins.close()
 
-	for _, f := range res.Files {
-		if _, err = tx.Exec(`INSERT INTO files(path, lang, size, lines, sha256, parsed, error, doc) VALUES(?,?,?,?,?,?,?,?)`,
-			f.Path, f.Lang, f.Size, f.Lines, f.SHA256, f.Parsed, nullable(f.Err), nullable(f.Doc)); err != nil {
+	for i := range res.Files {
+		if err = ins.writeFile(&res.Files[i]); err != nil {
 			return 0, err
 		}
-		if !f.Parsed {
-			continue
-		}
-		fileID, e := ins.node("FILE", f.Path, f.Path, f.Path, 1, f.Lines, f.Lang, f.Doc)
+	}
+	for _, imp := range res.Imports {
+		toID, e := ins.target(imp.Target)
 		if e != nil {
 			return 0, e
 		}
-		if f.Lang == "Go" {
-			pkg := filepath.ToSlash(filepath.Dir(f.Path))
-			pkgID, e := ins.node("PACKAGE", pkg, "pkg:"+pkg, pkg, 0, 0, "Go", "")
-			if e != nil {
-				return 0, e
-			}
-			if e := ins.edge(pkgID, fileID, "CONTAINS", f.Path, 0, 0); e != nil {
-				return 0, e
-			}
-		}
-		for _, sym := range f.Symbols {
-			q := f.Path + "#" + sym.QualifiedName()
-			id, e := ins.symbol(sym.Kind, sym.Name, q, f.Path, sym.LineStart, sym.LineEnd, f.Lang, sym.Container, sym.Doc, sym.Terms)
-			if e != nil {
-				return 0, e
-			}
-			if e := ins.edge(fileID, id, "CONTAINS", f.Path, sym.LineStart, sym.LineEnd); e != nil {
-				return 0, e
-			}
-		}
-	}
-
-	for _, imp := range res.Imports {
-		fromID := ins.ids["FILE\x00"+imp.From]
-		var toID int64
-		switch imp.Target.Kind {
-		case scan.TargetFile:
-			toID = ins.ids["FILE\x00"+imp.Target.Ref]
-		case scan.TargetPackage:
-			// Go packages already exist; Python namespace packages are created on first use.
-			if toID, err = ins.node("PACKAGE", imp.Target.Ref, "pkg:"+imp.Target.Ref, imp.Target.Ref, 0, 0, "", ""); err != nil {
-				return 0, err
-			}
-		}
-		if toID == 0 {
-			if toID, err = ins.node("EXTERNAL", imp.Target.Ref, "ext:"+imp.Target.Ref, "", 0, 0, "", ""); err != nil {
-				return 0, err
-			}
-		}
-		if err = ins.edge(fromID, toID, "IMPORTS", imp.From, imp.Line, imp.Line); err != nil {
+		if err = ins.importEdge(ins.ids["FILE\x00"+imp.From], toID, imp.From, imp.Line, imp.Spec, imp.MaybeSymbol); err != nil {
 			return 0, err
 		}
 	}
@@ -192,7 +152,63 @@ type inserter struct {
 	tx             *sql.Tx
 	ids            map[string]int64 // kind\x00qualname -> id, for FILE/PACKAGE/EXTERNAL
 	nodeSt, edgeSt *sql.Stmt
-	ftsSt          *sql.Stmt
+	ftsSt, impSt   *sql.Stmt
+}
+
+// writeFile records one file: its files row and, when parsed, its FILE node, Go
+// package membership, and symbols. Shared by full and incremental saves.
+func (in *inserter) writeFile(f *model.FileResult) error {
+	if _, err := in.tx.Exec(`INSERT OR REPLACE INTO files(path, lang, size, lines, sha256, parsed, error, doc, mtime_ns) VALUES(?,?,?,?,?,?,?,?,?)`,
+		f.Path, f.Lang, f.Size, f.Lines, f.SHA256, f.Parsed, nullable(f.Err), nullable(f.Doc), f.MtimeNS); err != nil {
+		return err
+	}
+	if !f.Parsed {
+		return nil
+	}
+	fileID, err := in.node("FILE", f.Path, f.Path, f.Path, 1, f.Lines, f.Lang, f.Doc)
+	if err != nil {
+		return err
+	}
+	if f.Lang == "Go" {
+		pkg := filepath.ToSlash(filepath.Dir(f.Path))
+		pkgID, err := in.node("PACKAGE", pkg, "pkg:"+pkg, pkg, 0, 0, "Go", "")
+		if err != nil {
+			return err
+		}
+		if err := in.edge(pkgID, fileID, "CONTAINS", f.Path, 0, 0); err != nil {
+			return err
+		}
+	}
+	for _, sym := range f.Symbols {
+		q := f.Path + "#" + sym.QualifiedName()
+		id, err := in.symbol(sym.Kind, sym.Name, q, f.Path, sym.LineStart, sym.LineEnd, f.Lang, sym.Container, sym.Doc, sym.Terms)
+		if err != nil {
+			return err
+		}
+		if err := in.edge(fileID, id, "CONTAINS", f.Path, sym.LineStart, sym.LineEnd); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// target returns the node an import resolves to, creating package/external nodes.
+func (in *inserter) target(t scan.Target) (int64, error) {
+	switch t.Kind {
+	case scan.TargetFile:
+		if id := in.ids["FILE\x00"+t.Ref]; id != 0 {
+			return id, nil
+		}
+	case scan.TargetPackage:
+		// Go packages usually exist already; Python namespace packages are created on use.
+		return in.node("PACKAGE", t.Ref, "pkg:"+t.Ref, t.Ref, 0, 0, "", "")
+	}
+	return in.node("EXTERNAL", t.Ref, "ext:"+t.Ref, "", 0, 0, "", "")
+}
+
+func (in *inserter) importEdge(src, dst int64, path string, line int, spec string, maybe bool) error {
+	_, err := in.impSt.Exec(src, dst, path, line, line, spec, maybe)
+	return err
 }
 
 func (in *inserter) prepare() (err error) {
@@ -202,12 +218,15 @@ func (in *inserter) prepare() (err error) {
 	if in.edgeSt, err = in.tx.Prepare(`INSERT INTO edges(src, dst, rel, path, line_start, line_end, origin, confidence) VALUES(?,?,?,?,?,?, 'static_analysis', 1.0)`); err != nil {
 		return err
 	}
+	if in.impSt, err = in.tx.Prepare(`INSERT INTO edges(src, dst, rel, path, line_start, line_end, origin, confidence, spec, maybe_sym) VALUES(?,?, 'IMPORTS', ?,?,?, 'static_analysis', 1.0, ?,?)`); err != nil {
+		return err
+	}
 	in.ftsSt, err = in.tx.Prepare(`INSERT INTO nodes_fts(rowid, name, words, qualname, path, doc, body) VALUES(?,?,?,?,?,?,?)`)
 	return err
 }
 
 func (in *inserter) close() {
-	for _, st := range []*sql.Stmt{in.nodeSt, in.edgeSt, in.ftsSt} {
+	for _, st := range []*sql.Stmt{in.nodeSt, in.edgeSt, in.ftsSt, in.impSt} {
 		if st != nil {
 			st.Close()
 		}

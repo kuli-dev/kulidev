@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../api";
-import { clearDefinitionCache, installKnowledge, languageOf, monaco, themeName, uriOf } from "../monaco";
+import { clearDefinitionCache } from "../defs";
+import { installKnowledge, languageOf, monaco, themeName, uriOf } from "../monaco";
 import { forgetFile, loadFile } from "./files";
 
 // Per-file editing state lives outside React so it survives tab switches.

@@ -8,23 +8,24 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/kuli-dev/kulidev/internal/report"
-	"github.com/kuli-dev/kulidev/internal/scan"
 	"github.com/kuli-dev/kulidev/internal/store"
 )
 
 func newScanCmd(o *options) *cobra.Command {
-	return &cobra.Command{
+	var full bool
+	cmd := &cobra.Command{
 		Use:   "scan [path]",
-		Short: "Analyse a repository and build its knowledge base",
-		Args:  cobra.MaximumNArgs(1),
+		Short: "Analyse a repository and build or update its knowledge base",
+		Long: `Builds the knowledge base on first run; afterwards only files whose size, mtime or
+content changed are re-parsed. Use --full to rebuild from scratch.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) == 1 {
 				o.repo = args[0]
 			}
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "kuli lagi kerja… scanning %s\n", o.repo)
-
-			res, err := scan.Scan(o.repo)
+			root, err := filepath.Abs(o.repo)
 			if err != nil {
 				return err
 			}
@@ -37,22 +38,25 @@ func newScanCmd(o *options) *cobra.Command {
 				return err
 			}
 			defer st.Close()
-			if _, err := st.Save(res); err != nil {
-				return fmt.Errorf("save knowledge base: %w", err)
+			sum, err := st.Refresh(root, full)
+			if err != nil {
+				return fmt.Errorf("update knowledge base: %w", err)
 			}
 			stats, err := st.Stats()
 			if err != nil {
 				return err
 			}
 			report.Stats(out, stats)
-			rel, _ := filepath.Rel(res.Root, filepath.Join(dir, store.DBFile))
+			rel, _ := filepath.Rel(root, filepath.Join(dir, store.DBFile))
 			if strings.HasPrefix(rel, "..") {
 				rel = filepath.Join(dir, store.DBFile)
 			}
-			fmt.Fprintf(out, "\nSaved      %s\n", rel)
+			fmt.Fprintf(out, "\nUpdated    %s (%s)\n", rel, sum)
 			return nil
 		},
 	}
+	cmd.Flags().BoolVar(&full, "full", false, "rebuild the knowledge base from scratch")
+	return cmd
 }
 
 func newStatsCmd(o *options) *cobra.Command {
